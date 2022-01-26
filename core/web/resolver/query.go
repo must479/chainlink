@@ -106,7 +106,7 @@ func (r *Resolver) Chains(ctx context.Context, args struct {
 	return NewChainsPayload(page, int32(count)), nil
 }
 
-// Chains retrieves a paginated list of chains.
+// TerraChains retrieves a paginated list of terra chains.
 func (r *Resolver) TerraChains(ctx context.Context, args struct {
 	Offset *int32
 	Limit  *int32
@@ -124,6 +124,51 @@ func (r *Resolver) TerraChains(ctx context.Context, args struct {
 	}
 
 	return NewTerraChainsPayload(page, int32(count)), nil
+}
+
+// TODO: probably do something better than this
+func chainType(c *int32) int32 {
+	if c == nil {
+		return 0
+	}
+	return int32(*c)
+}
+
+// MultiChains retrieves a paginated list of chains by type.
+func (r *Resolver) MultiChains(ctx context.Context, args struct {
+	Offset    *int32
+	Limit     *int32
+	ChainType *int32
+}) (*MultiChainsPayloadResolver, error) {
+	if err := authenticateUser(ctx); err != nil {
+		return nil, err
+	}
+
+	offset := pageOffset(args.Offset)
+	limit := pageLimit(args.Limit)
+	cType := chainType(args.ChainType)
+
+	switch cType {
+	case 1:
+		page, count, err := r.App.TerraORM().Chains(offset, limit)
+		if err != nil {
+			return nil, err
+		}
+		return NewMultiChainsPayload(NewMultiChainsPayloadParams{
+			terraChains: page,
+		}, int32(count)), nil
+	case 0:
+		page, count, err := r.App.EVMORM().Chains(offset, limit)
+		if err != nil {
+			return nil, err
+		}
+		return NewMultiChainsPayload(NewMultiChainsPayloadParams{
+			evmChains: page,
+		}, int32(count)), nil
+	default:
+		return nil, errors.New("bad chain type")
+	}
+
 }
 
 // FeedsManager retrieves a feeds manager by id.
