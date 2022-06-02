@@ -14,7 +14,7 @@ import (
 
 	evmclient "github.com/smartcontractkit/chainlink/core/chains/evm/client"
 	"github.com/smartcontractkit/chainlink/core/chains/evm/log"
-	offchain_aggregator_wrapper "github.com/smartcontractkit/chainlink/core/internal/gethwrappers2/generated/offchainaggregator"
+	offchain_aggregator_wrapper "github.com/smartcontractkit/chainlink/core/gethwrappers2/generated/offchainaggregator"
 	"github.com/smartcontractkit/chainlink/core/logger"
 	"github.com/smartcontractkit/chainlink/core/services/ocrcommon"
 	"github.com/smartcontractkit/chainlink/core/services/pg"

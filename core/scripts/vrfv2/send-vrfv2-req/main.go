@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_consumer_v2"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_consumer_v2"
 )
 
 func panicErr(err error) {

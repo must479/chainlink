@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/pkg/errors"
 	"github.com/smartcontractkit/chainlink/core/assets"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_verifier_wrapper"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_verifier_wrapper"
 	"github.com/smartcontractkit/chainlink/core/internal/testutils/pgtest"
 	"github.com/stretchr/testify/require"
 )

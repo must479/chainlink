@@ -12,9 +12,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/smartcontractkit/chainlink/core/cmd"
-	keeper "github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/keeper_registry_wrapper1_1"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/upkeep_counter_wrapper"
-	upkeep "github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/upkeep_perform_counter_restrictive_wrapper"
+	keeper "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/keeper_registry_wrapper1_1"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/upkeep_counter_wrapper"
+	upkeep "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/upkeep_perform_counter_restrictive_wrapper"
 	"github.com/smartcontractkit/chainlink/core/logger"
 	"github.com/smartcontractkit/chainlink/core/scripts/chaincli/config"
 	helpers "github.com/smartcontractkit/chainlink/core/scripts/common"

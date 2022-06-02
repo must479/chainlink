@@ -18,8 +18,8 @@ import (
 	"go.dedis.ch/kyber/v3"
 
 	"github.com/smartcontractkit/chainlink/core/assets"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_verifier_wrapper"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_verifier_wrapper"
 	"github.com/smartcontractkit/chainlink/core/services/keystore/keys/vrfkey"
 	"github.com/smartcontractkit/chainlink/core/services/signatures/secp256k1"
 	"github.com/smartcontractkit/chainlink/core/utils"

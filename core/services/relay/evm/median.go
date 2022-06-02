@@ -14,7 +14,7 @@ import (
 	"github.com/smartcontractkit/sqlx"
 
 	"github.com/smartcontractkit/chainlink/core/chains/evm"
-	offchain_aggregator_wrapper "github.com/smartcontractkit/chainlink/core/internal/gethwrappers2/generated/offchainaggregator"
+	offchain_aggregator_wrapper "github.com/smartcontractkit/chainlink/core/gethwrappers2/generated/offchainaggregator"
 	"github.com/smartcontractkit/chainlink/core/logger"
 )
 

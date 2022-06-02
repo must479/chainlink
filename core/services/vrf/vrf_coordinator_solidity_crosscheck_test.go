@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/smartcontractkit/chainlink/core/assets"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/blockhash_store"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/blockhash_store"
 	proof2 "github.com/smartcontractkit/chainlink/core/services/vrf/proof"
 
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_consumer_interface_v08"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_request_id_v08"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_consumer_interface_v08"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_request_id_v08"
 
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 
@@ -30,11 +30,11 @@ import (
 	"github.com/smartcontractkit/chainlink/core/services/vrf"
 	"github.com/smartcontractkit/chainlink/core/utils"
 
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/link_token_interface"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_consumer_interface"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_coordinator_interface"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_request_id"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/link_token_interface"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_consumer_interface"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_coordinator_interface"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_request_id"
 )
 
 // coordinatorUniverse represents the universe in which a randomness request occurs and

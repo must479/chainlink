@@ -60,7 +60,7 @@ abigen: ## Build & install abigen.
 .PHONY: go-solidity-wrappers
 go-solidity-wrappers: tools/bin/abigen ## Recompiles solidity contracts and their go wrappers.
 	./contracts/scripts/native_solc_compile_all
-	go generate ./core/internal/gethwrappers
+	go generate ./core/gethwrappers
 
 .PHONY: testdb
 testdb: ## Prepares the test database.

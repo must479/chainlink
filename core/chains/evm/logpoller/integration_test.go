@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/smartcontractkit/chainlink/core/chains/evm/logpoller"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/log_emitter"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest/heavyweight"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/log_emitter"
 	"github.com/smartcontractkit/chainlink/core/internal/testutils"
 	"github.com/smartcontractkit/chainlink/core/internal/testutils/pgtest"
 	"github.com/smartcontractkit/chainlink/core/logger"

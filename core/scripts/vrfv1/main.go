@@ -16,9 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shopspring/decimal"
 
-	linktoken "github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/link_token_interface"
-	vrfltoc "github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_load_test_ownerless_consumer"
-	vrfoc "github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_ownerless_consumer_example"
+	linktoken "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/link_token_interface"
+	vrfltoc "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_load_test_ownerless_consumer"
+	vrfoc "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_ownerless_consumer_example"
 	helpers "github.com/smartcontractkit/chainlink/core/scripts/common"
 	"github.com/smartcontractkit/chainlink/core/utils"
 )

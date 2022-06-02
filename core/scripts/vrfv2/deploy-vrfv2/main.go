@@ -7,10 +7,10 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/link_token_interface"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/mock_v3_aggregator_contract"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_consumer_v2"
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_coordinator_v2"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/link_token_interface"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/mock_v3_aggregator_contract"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_consumer_v2"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_coordinator_v2"
 	"github.com/smartcontractkit/chainlink/core/services/vrf"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"

@@ -5,7 +5,7 @@ import (
 	mrand "math/rand"
 	"testing"
 
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/solidity_vrf_v08_verifier_wrapper"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_v08_verifier_wrapper"
 	proof2 "github.com/smartcontractkit/chainlink/core/services/vrf/proof"
 
 	"github.com/ethereum/go-ethereum/eth/ethconfig"

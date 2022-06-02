@@ -10,7 +10,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/smartcontractkit/chainlink/core/internal/gethwrappers/generated/vrf_coordinator_v2"
+	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_coordinator_v2"
 	helpers "github.com/smartcontractkit/chainlink/core/scripts/common"
 )
 
