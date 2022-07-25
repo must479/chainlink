@@ -9,12 +9,13 @@ import (
 	"sync"
 	"time"
 
-	goeath "github.com/ethereum/go-ethereum"
+	geth "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
+
 	"github.com/smartcontractkit/chainlink-env/environment"
 	"github.com/smartcontractkit/chainlink-testing-framework/blockchain"
 	ctfClient "github.com/smartcontractkit/chainlink-testing-framework/client"
@@ -129,7 +130,7 @@ func (t *OCRSoakTest) Run() {
 	// Test Loop
 	roundNumber := 1
 	newRoundTrigger, cancelFunc := context.WithTimeout(context.Background(), 0)
-	t.subscribeToAnswerUpdatedEvent(newRoundTrigger)
+	// t.subscribeToAnswerUpdatedEvent(newRoundTrigger)
 	for {
 		select {
 		case <-stopTestChannel:
@@ -243,10 +244,10 @@ func (t *OCRSoakTest) checkLatestRound(expectedValue, roundNumber int) {
 
 // subscribeToAnswerUpdatedEvent subscribes to the event log for AnswerUpdated event and
 // verifies if the answer is matching with the expected value
-func (t *OCRSoakTest) subscribeToAnswerUpdatedEvent(ctx context.Context) {
+func (t *OCRSoakTest) subscribeToAnswerUpdatedEvent(ctx context.Context, answerUpdated chan types.Log) {
 	contractABI, err := ethereum.OffchainAggregatorMetaData.GetAbi()
 	Expect(err).ShouldNot(HaveOccurred(), "Getting contract abi for OCR shouldn't fail")
-	query := goeath.FilterQuery{
+	query := geth.FilterQuery{
 		Addresses: []common.Address{},
 	}
 	for i := 0; i < len(t.ocrInstances); i++ {
@@ -272,7 +273,7 @@ func (t *OCRSoakTest) subscribeToAnswerUpdatedEvent(ctx context.Context) {
 				// whenever there is an event for AnswerUpdated verify if the corresponding answer is matching with
 				// adapter response, otherwise just log the event name
 				if eventDetails.Name == "AnswerUpdated" {
-					answer, err := ocr.ParseEventAnswerUpdated(vLog)
+					answer, err := ocr.ParseAnswerUpdated(vLog)
 					Expect(err).ShouldNot(
 						HaveOccurred(),
 						"Parsing AnswerUpdated event log in OCR instance shouldn't fail")

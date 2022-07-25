@@ -14,10 +14,11 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/smartcontractkit/chainlink-env/environment"
 	chainlinkChart "github.com/smartcontractkit/chainlink-env/pkg/helm/chainlink"
 	ctfClient "github.com/smartcontractkit/chainlink-testing-framework/client"
-	"golang.org/x/sync/errgroup"
 )
 
 // OneLINK representation of a single LINK token

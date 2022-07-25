@@ -11,12 +11,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
+	ocrConfigHelper "github.com/smartcontractkit/libocr/offchainreporting/confighelper"
+	ocrTypes "github.com/smartcontractkit/libocr/offchainreporting/types"
+
 	"github.com/smartcontractkit/chainlink-testing-framework/blockchain"
 	"github.com/smartcontractkit/chainlink-testing-framework/contracts/ethereum"
 	"github.com/smartcontractkit/chainlink/integration-tests/client"
 	"github.com/smartcontractkit/chainlink/integration-tests/testreporters"
-	ocrConfigHelper "github.com/smartcontractkit/libocr/offchainreporting/confighelper"
-	ocrTypes "github.com/smartcontractkit/libocr/offchainreporting/types"
 )
 
 // EthereumOracle oracle for "directrequest" job tests
@@ -772,8 +773,8 @@ func (o *EthereumOffchainAggregator) GetLatestRound(ctxt context.Context) (*Roun
 	}, err
 }
 
-// ParseEventAnswerUpdated parses the log for event AnswerUpdated
-func (o *EthereumOffchainAggregator) ParseEventAnswerUpdated(eventLog types.Log) (*ethereum.OffchainAggregatorAnswerUpdated, error) {
+// ParseAnswerUpdated parses the log for event AnswerUpdated
+func (o *EthereumOffchainAggregator) ParseAnswerUpdated(eventLog types.Log) (*ethereum.OffchainAggregatorAnswerUpdated, error) {
 	return o.ocr.ParseAnswerUpdated(eventLog)
 }
 
