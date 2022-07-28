@@ -17,7 +17,6 @@ import (
 	"github.com/smartcontractkit/chainlink-testing-framework/blockchain"
 	"github.com/smartcontractkit/chainlink-testing-framework/contracts/ethereum"
 	"github.com/smartcontractkit/chainlink/integration-tests/client"
-	"github.com/smartcontractkit/chainlink/integration-tests/testreporters"
 )
 
 // EthereumOracle oracle for "directrequest" job tests
@@ -596,7 +595,7 @@ func (o *EthereumOffchainAggregator) Fund(ethAmount *big.Float) error {
 }
 
 // GetContractData retrieves basic data for the offchain aggregator contract
-func (o *EthereumOffchainAggregator) GetContractData(ctxt context.Context) (*OffchainAggregatorData, error) {
+func (o *EthereumOffchainAggregator) GetContractData(ctxt context.Context) (*OffChainAggregatorData, error) {
 	opts := &bind.CallOpts{
 		From:    common.HexToAddress(o.client.GetDefaultWallet().Address()),
 		Context: ctxt,
@@ -604,11 +603,11 @@ func (o *EthereumOffchainAggregator) GetContractData(ctxt context.Context) (*Off
 
 	lr, err := o.ocr.LatestRoundData(opts)
 	if err != nil {
-		return &OffchainAggregatorData{}, err
+		return &OffChainAggregatorData{}, err
 	}
 	latestRound := RoundData(lr)
 
-	return &OffchainAggregatorData{
+	return &OffChainAggregatorData{
 		LatestRoundData: latestRound,
 	}, nil
 }
@@ -837,30 +836,27 @@ func (o *RunlogRoundConfirmer) Wait() error {
 
 // OffchainAggregatorRoundConfirmer is a header subscription that awaits for a certain OCR round to be completed
 type OffchainAggregatorRoundConfirmer struct {
-	ocrInstance        OffchainAggregator
-	roundID            *big.Int
-	doneChan           chan struct{}
-	context            context.Context
-	cancel             context.CancelFunc
-	optionalTestReport *testreporters.OCRSoakTestReport
-	blocksSinceAnswer  uint
+	ocrInstance       OffChainAggregator
+	roundID           *big.Int
+	doneChan          chan struct{}
+	context           context.Context
+	cancel            context.CancelFunc
+	blocksSinceAnswer uint
 }
 
 // NewOffchainAggregatorRoundConfirmer provides a new instance of a OffchainAggregatorRoundConfirmer
 func NewOffchainAggregatorRoundConfirmer(
-	contract OffchainAggregator,
+	contract OffChainAggregator,
 	roundID *big.Int,
 	timeout time.Duration,
-	optionalTestReport *testreporters.OCRSoakTestReport,
 ) *OffchainAggregatorRoundConfirmer {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), timeout)
 	return &OffchainAggregatorRoundConfirmer{
-		ocrInstance:        contract,
-		roundID:            roundID,
-		doneChan:           make(chan struct{}),
-		context:            ctx,
-		cancel:             ctxCancel,
-		optionalTestReport: optionalTestReport,
+		ocrInstance: contract,
+		roundID:     roundID,
+		doneChan:    make(chan struct{}),
+		context:     ctx,
+		cancel:      ctxCancel,
 	}
 }
 
@@ -891,12 +887,6 @@ func (o *OffchainAggregatorRoundConfirmer) ReceiveBlock(_ blockchain.NodeBlock) 
 
 // Wait is a blocking function that will wait until the round has confirmed, and timeout if the deadline has passed
 func (o *OffchainAggregatorRoundConfirmer) Wait() error {
-	startTime := time.Now()
-	defer func() {
-		if o.optionalTestReport != nil {
-			o.optionalTestReport.UpdateReport(time.Since(startTime), o.blocksSinceAnswer)
-		}
-	}()
 	for {
 		select {
 		case <-o.doneChan:

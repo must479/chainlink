@@ -42,7 +42,7 @@ var _ = Describe("OCR Feed @ocr", func() {
 		linkTokenContract contracts.LinkToken
 		chainlinkNodes    []client.Chainlink
 		mockServer        *ctfClient.MockserverClient
-		ocrInstances      []contracts.OffchainAggregator
+		ocrInstances      []contracts.OffChainAggregator
 	)
 
 	AfterEach(func() {

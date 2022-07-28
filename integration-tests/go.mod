@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
-	github.com/ethereum/go-ethereum v1.10.20
+	github.com/ethereum/go-ethereum v1.10.21
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.19.0
 	github.com/pkg/errors v0.9.1
@@ -19,6 +19,8 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/guregu/null.v4 v4.0.0
 )
+
+replace github.com/smartcontractkit/chainlink-testing-framework => /Users/adamhamrick/Projects/chainlink-testing-framework
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect

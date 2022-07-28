@@ -132,7 +132,7 @@ func EncodeOnChainVRFProvingKey(vrfKey client.VRFKey) ([2]*big.Int, error) {
 
 // GetMockserverInitializerDataForOTPE creates mocked weiwatchers data needed for otpe
 func GetMockserverInitializerDataForOTPE(
-	OCRInstances []contracts.OffchainAggregator,
+	OCRInstances []contracts.OffChainAggregator,
 	chainlinkNodes []client.Chainlink,
 ) (interface{}, error) {
 	var contractsInfo []ctfClient.ContractInfoJSON

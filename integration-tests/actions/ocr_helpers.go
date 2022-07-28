@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -19,16 +20,16 @@ import (
 // This actions file often returns functions, rather than just values. These are used as common test helpers, and are
 // handy to have returning as functions so that Ginkgo can use them in an aesthetically pleasing way.
 
-// DeployOCRContracts deploys and funds a certain number of offchain aggregator contracts
+// DeployOCRContracts deploys and funds a certain number of OffChainAggregator contracts
 func DeployOCRContracts(
 	numberOfContracts int,
 	linkTokenContract contracts.LinkToken,
 	contractDeployer contracts.ContractDeployer,
 	chainlinkNodes []client.Chainlink,
 	client blockchain.EVMClient,
-) []contracts.OffchainAggregator {
+) []contracts.OffChainAggregator {
 	// Deploy contracts
-	var ocrInstances []contracts.OffchainAggregator
+	var ocrInstances []contracts.OffChainAggregator
 	for contractCount := 0; contractCount < numberOfContracts; contractCount++ {
 		ocrInstance, err := contractDeployer.DeployOffChainAggregator(
 			linkTokenContract.Address(),
@@ -67,7 +68,7 @@ func DeployOCRContracts(
 
 	// Set Config
 	for contractCount, ocrInstance := range ocrInstances {
-		// Exclude the first node, which will be used as a bootstrapper
+		// Exclude the first node, which will be used as a bootstrap node
 		err = ocrInstance.SetConfig(
 			chainlinkNodes[1:],
 			contracts.DefaultOffChainAggregatorConfig(len(chainlinkNodes[1:])),
@@ -86,7 +87,7 @@ func DeployOCRContracts(
 // CreateOCRJobs bootstraps the first node and to the other nodes sends ocr jobs that
 // read from different adapters, to be used in combination with SetAdapterResponses
 func CreateOCRJobs(
-	ocrInstances []contracts.OffchainAggregator,
+	ocrInstances []contracts.OffChainAggregator,
 	chainlinkNodes []client.Chainlink,
 	mockserver *ctfClient.MockserverClient,
 ) func() {
@@ -146,7 +147,7 @@ func CreateOCRJobs(
 // SetAdapterResponse sets a single adapter response that correlates with an ocr contract and a chainlink node
 func SetAdapterResponse(
 	response int,
-	ocrInstance contracts.OffchainAggregator,
+	ocrInstance contracts.OffChainAggregator,
 	chainlinkNode client.Chainlink,
 	mockserver *ctfClient.MockserverClient,
 ) func() {
@@ -162,16 +163,23 @@ func SetAdapterResponse(
 // to simulate different adapters. This sets all adapter responses for each node and contract to the same response
 func SetAllAdapterResponsesToTheSameValue(
 	response int,
-	ocrInstances []contracts.OffchainAggregator,
+	ocrInstances []contracts.OffChainAggregator,
 	chainlinkNodes []client.Chainlink,
 	mockserver *ctfClient.MockserverClient,
 ) func() {
 	return func() {
+		var adapterWaitGroup sync.WaitGroup
 		for _, ocrInstance := range ocrInstances {
-			for _, node := range chainlinkNodes {
-				SetAdapterResponse(response, ocrInstance, node, mockserver)()
-			}
+			adapterWaitGroup.Add(1)
+			ocrInstance := ocrInstance
+			go func() {
+				defer adapterWaitGroup.Done()
+				for _, node := range chainlinkNodes {
+					SetAdapterResponse(response, ocrInstance, node, mockserver)()
+				}
+			}()
 		}
+		adapterWaitGroup.Wait()
 	}
 }
 
@@ -179,7 +187,7 @@ func SetAllAdapterResponsesToTheSameValue(
 // to simulate different adapters. This sets all adapter responses for each node and contract to different responses
 func SetAllAdapterResponsesToDifferentValues(
 	responses []int,
-	ocrInstances []contracts.OffchainAggregator,
+	ocrInstances []contracts.OffChainAggregator,
 	chainlinkNodes []client.Chainlink,
 	mockserver *ctfClient.MockserverClient,
 ) func() {
@@ -196,7 +204,7 @@ func SetAllAdapterResponsesToDifferentValues(
 // StartNewRound requests a new round from the ocr contracts and waits for confirmation
 func StartNewRound(
 	roundNr int64,
-	ocrInstances []contracts.OffchainAggregator,
+	ocrInstances []contracts.OffChainAggregator,
 	client blockchain.EVMClient,
 ) func() {
 	return func() {
@@ -204,7 +212,7 @@ func StartNewRound(
 		for i := 0; i < len(ocrInstances); i++ {
 			err := ocrInstances[i].RequestNewRound()
 			Expect(err).ShouldNot(HaveOccurred(), "Requesting new round in OCR instance %d shouldn't fail", i+1)
-			ocrRound := contracts.NewOffchainAggregatorRoundConfirmer(ocrInstances[i], big.NewInt(roundNr), roundTimeout, nil)
+			ocrRound := contracts.NewOffchainAggregatorRoundConfirmer(ocrInstances[i], big.NewInt(roundNr), roundTimeout)
 			client.AddHeaderEventSubscription(ocrInstances[i].Address(), ocrRound)
 			err = client.WaitForEvents()
 			Expect(err).ShouldNot(HaveOccurred(), "Waiting for Event subscriptions of OCR instance %d shouldn't fail", i+1)
@@ -213,7 +221,7 @@ func StartNewRound(
 }
 
 // BuildNodeContractPairID builds a UUID based on a related pair of a Chainlink node and OCR contract
-func BuildNodeContractPairID(node client.Chainlink, ocrInstance contracts.OffchainAggregator) string {
+func BuildNodeContractPairID(node client.Chainlink, ocrInstance contracts.OffChainAggregator) string {
 	Expect(node).ShouldNot(BeNil())
 	Expect(ocrInstance).ShouldNot(BeNil())
 	nodeAddress, err := node.PrimaryEthAddress()

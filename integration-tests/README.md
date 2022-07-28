@@ -48,11 +48,13 @@ Other `EVM_*` variables are retrieved when running with the `@general` tag, and 
 
 **The tests will not automatically load your .env file. Remember to run `source .env` for changes to take effect.**
 
-## How to Run
+## Smoke Tests
+
+Smoke tests (also known as Sanity Tests) are designed to be fast and minimal. They quickly check that critical features are working as expected in ideal scenarios, and serve as a speedy check that nothing crucial is broken.
+
+### Running
 
 Most of the time, you'll want to run tests on a simulated chain, for the purposes of speed and cost.
-
-### Smoke
 
 Run all smoke tests, only using simulated blockchains.
 
@@ -73,7 +75,15 @@ make test_smoke args="-focus=@metis" # Runs all the smoke tests on the Metis Sta
 make test_smoke args="-focus=@general" # Runs all smoke tests for a network that you define in environment vars
 ```
 
-### Soak
+## Soak Tests
+
+Soak tests are designed with the intention to "soak" for long periods of time, testing how the program holds up after running for hours, days, or weeks.
+
+### Remote Test Runner
+
+Because soak tests are running for long periods of time, they don't run from your local machine. Instead, your local machine sets up everything the test needs on your Kubernetes cluster, then launches an additional node called `remote-test-runner`. Your test is then run by this node from within the cluster. This ensures that you're not relying on your local machine to run interrupted for the duration of the test, and rather hands over execution to the k8s cluster.
+
+### Running Soak Tests
 
 Currently we have 2 soak tests, both can be triggered using make commands.
 
@@ -88,7 +98,11 @@ To configure specific parameters of how the soak tests run (e.g. test length, nu
 
 See the [soak_runner](./soak/soak_runner_test.go) for more info on how the tests are run and configured.
 
-### Performance
+## Performance Tests
+
+Performance tests usually time how fast the application can run regular operations. The intent is to track that performance isn't unexpectedly degrading from different changes.
+
+### Running Performance Tests
 
 Currently, all performance tests are only run on simulated blockchains.
 

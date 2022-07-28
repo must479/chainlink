@@ -125,19 +125,19 @@ type OffChainAggregatorV2Config struct {
 	OnchainConfig                           []byte
 }
 
-type OffchainAggregatorData struct {
+type OffChainAggregatorData struct {
 	LatestRoundData RoundData // Data about the latest round
 }
 
-type OffchainAggregator interface {
+type OffChainAggregator interface {
 	Address() string
 	Fund(nativeAmount *big.Float) error
-	GetContractData(ctxt context.Context) (*OffchainAggregatorData, error)
+	GetContractData(ctxt context.Context) (*OffChainAggregatorData, error)
 	SetConfig(chainlinkNodes []client.Chainlink, ocrConfig OffChainAggregatorConfig) error
 	SetPayees([]string, []string) error
 	RequestNewRound() error
-	GetLatestAnswer(ctxt context.Context) (*big.Int, error)
-	GetLatestRound(ctxt context.Context) (*RoundData, error)
+	GetLatestAnswer(ctx context.Context) (*big.Int, error)
+	GetLatestRound(ctx context.Context) (*RoundData, error)
 	ParseAnswerUpdated(log types.Log) (*ethereum.OffchainAggregatorAnswerUpdated, error)
 }
 

@@ -29,7 +29,7 @@ type ContractDeployer interface {
 	) (DeviationFlaggingValidator, error)
 	DeployFluxAggregatorContract(linkAddr string, fluxOptions FluxAggregatorOptions) (FluxAggregator, error)
 	DeployLinkTokenContract() (LinkToken, error)
-	DeployOffChainAggregator(linkAddr string, offchainOptions OffchainOptions) (OffchainAggregator, error)
+	DeployOffChainAggregator(linkAddr string, offchainOptions OffchainOptions) (OffChainAggregator, error)
 	DeployVRFContract() (VRF, error)
 	DeployMockETHLINKFeed(answer *big.Int) (MockETHLINKFeed, error)
 	DeployMockGasFeed(answer *big.Int) (MockGasFeed, error)
@@ -257,7 +257,7 @@ func DefaultOffChainAggregatorConfig(numberNodes int) OffChainAggregatorConfig {
 func (e *EthereumContractDeployer) DeployOffChainAggregator(
 	linkAddr string,
 	offchainOptions OffchainOptions,
-) (OffchainAggregator, error) {
+) (OffChainAggregator, error) {
 	address, _, instance, err := e.client.DeployContract("OffChain Aggregator", func(
 		auth *bind.TransactOpts,
 		backend bind.ContractBackend,
