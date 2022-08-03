@@ -134,7 +134,9 @@ func (k *KeeperBenchmarkTest) Run() {
 
 	for _, chainlinkNode := range k.chainlinkNodes {
 		txData, err := chainlinkNode.MustReadTransactionAttempts()
-		Expect(err).ShouldNot(HaveOccurred(), "Error retrieving transaction data from chainlink node")
+		if err != nil {
+			log.Error().Err(err).Msg("Error reading transaction attempts from Chainlink Node")
+		}
 		k.TestReporter.AttemptedChainlinkTransactions = append(k.TestReporter.AttemptedChainlinkTransactions, txData)
 	}
 
@@ -159,10 +161,10 @@ func (k *KeeperBenchmarkTest) Run() {
 		panic(err)
 	}
 
-	k.TestReporter.Summary.Config.Geth, err = k.env.ResourcesSummary("app=geth")
-	if err != nil {
-		panic(err)
-	}
+	// k.TestReporter.Summary.Config.Geth, err = k.env.ResourcesSummary("app=geth")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	endTime := time.Now()
 	k.TestReporter.Summary.StartTime = startTime.UnixMilli() - (90 * time.Second.Milliseconds())

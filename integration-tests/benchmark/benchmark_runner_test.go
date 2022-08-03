@@ -30,8 +30,8 @@ var baseEnvironmentConfig = &environment.Config{
 
 // Run the Keepers Benchmark test defined in ./tests/keeper_test.go
 func TestKeeperBenchmark(t *testing.T) {
-	activeEVMNetwork := networks.SimulatedEVM // Environment currently being used to run benchmark test on
-	// activeEVMNetwork := networks.GeneralEVM() // To run benchmark test on any mainet/testnet
+	// activeEVMNetwork := networks.SimulatedEVM // Environment currently being used to run benchmark test on
+	activeEVMNetwork := networks.GeneralEVM() // To run benchmark test on any mainet/testnet
 
 	baseEnvironmentConfig.NamespacePrefix = fmt.Sprintf(
 		"benchmark-keeper-%s",
@@ -40,11 +40,20 @@ func TestKeeperBenchmark(t *testing.T) {
 	testEnvironment := environment.New(baseEnvironmentConfig)
 
 	// Values you want each node to have the exact same of (e.g. eth_chain_id)
-	staticValues := activeEVMNetwork.ChainlinkValuesMap()
+	// staticValues := activeEVMNetwork.ChainlinkValuesMap()
+	staticValues := map[string]interface{}{
+		"KEEPER_REGISTRY_SYNC_INTERVAL":  "",
+		"ETH_URL":                        "",
+		"ETH_CHAIN_ID":                   "",
+		"ETH_MAX_IN_FLIGHT_TRANSACTIONS": "3",
+		"ETH_MAX_QUEUED_TRANSACTIONS":    "15",
+		"ETH_GAS_BUMP_TX_DEPTH":          "3",
+	}
 	keeperBenchmarkValues := map[string]interface{}{
 		"MIN_INCOMING_CONFIRMATIONS": "1",
 		"KEEPER_TURN_FLAG_ENABLED":   "true",
 		"CHAINLINK_DEV":              "false",
+		"EVM_NODES":                  os.Getenv("EVM_NODES"),
 	}
 	mergo.Merge(&staticValues, &keeperBenchmarkValues)
 	// List of distinct Chainlink nodes to launch, and their distinct values (blank interface for none)
@@ -93,24 +102,24 @@ func addSeparateChainlinkDeployments(
 			"chainlink": map[string]interface{}{
 				"resources": map[string]interface{}{
 					"requests": map[string]interface{}{
-						"cpu":    "1000m",
-						"memory": "4Gi",
+						"cpu":    "350m",
+						"memory": "1Gi",
 					},
 					"limits": map[string]interface{}{
-						"cpu":    "1000m",
-						"memory": "4Gi",
+						"cpu":    "350m",
+						"memory": "1Gi",
 					},
 				},
 			},
 			"db": map[string]interface{}{
 				"resources": map[string]interface{}{
 					"requests": map[string]interface{}{
-						"cpu":    "1000m",
-						"memory": "1Gi",
+						"cpu":    "250m",
+						"memory": "256Mi",
 					},
 					"limits": map[string]interface{}{
-						"cpu":    "1000m",
-						"memory": "1Gi",
+						"cpu":    "250m",
+						"memory": "256Mi",
 					},
 				},
 				"stateful": true,
@@ -145,11 +154,11 @@ func benchmarkTestHelper(
 		"remote_test_runner": remoteRunnerValues,
 		"resources": map[string]interface{}{
 			"requests": map[string]interface{}{
-				"cpu":    "1000m",
+				"cpu":    "250m",
 				"memory": "512Mi",
 			},
 			"limits": map[string]interface{}{
-				"cpu":    "1000m",
+				"cpu":    "250m",
 				"memory": "512Mi",
 			},
 		},
