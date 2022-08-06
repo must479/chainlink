@@ -69,7 +69,7 @@ var _ = Describe("Keeper benchmark suite @benchmark-keeper", func() {
 					},
 					CheckGasToBurn:       1,
 					PerformGasToBurn:     1,
-					BlockRange:           1920, //8 hours
+					BlockRange:           55000, //~9 days
 					BlockInterval:        6,
 					ChainlinkNodeFunding: big.NewFloat(5),
 					UpkeepGasLimit:       5000000,
