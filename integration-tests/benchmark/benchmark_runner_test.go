@@ -48,6 +48,8 @@ func TestKeeperBenchmark(t *testing.T) {
 		"ETH_MAX_IN_FLIGHT_TRANSACTIONS": "3",
 		"ETH_MAX_QUEUED_TRANSACTIONS":    "15",
 		"ETH_GAS_BUMP_TX_DEPTH":          "3",
+		"ETH_HEAD_TRACKER_HISTORY_DEPTH": "1500",
+		"ETH_FINALITY_DEPTH":             "1000",
 	}
 	keeperBenchmarkValues := map[string]interface{}{
 		"MIN_INCOMING_CONFIRMATIONS": "1",
