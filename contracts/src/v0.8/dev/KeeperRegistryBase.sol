@@ -10,6 +10,7 @@ import "./ExecutionPrevention.sol";
 import "../interfaces/AggregatorV3Interface.sol";
 import "../interfaces/LinkTokenInterface.sol";
 import "../interfaces/KeeperCompatibleInterface.sol";
+import "../interfaces/UpkeepTranscoderInterface.sol";
 import {Config, State} from "./interfaces/KeeperRegistryInterfaceDev.sol";
 
 /**
@@ -27,6 +28,8 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
   uint256 internal constant PPB_BASE = 1_000_000_000;
   uint64 internal constant UINT64_MAX = 2**64 - 1;
   uint96 internal constant LINK_TOTAL_SUPPLY = 1e27;
+  UpkeepFormat internal constant UPKEEP_TRANSCODER_VESION_BASE = UpkeepFormat.V1;
+
   // L1_FEE_DATA_PADDING includes 35 bytes for L1 data padding for Optimism
   bytes public L1_FEE_DATA_PADDING = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
   // MAX_INPUT_DATA represents the estimated max size of the sum of L1 data padding and msg.data in performUpkeep
@@ -40,6 +43,7 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
   mapping(uint256 => Upkeep) internal s_upkeep;
   mapping(address => KeeperInfo) internal s_keeperInfo;
   mapping(address => address) internal s_proposedPayee;
+  mapping(uint256 => address) internal s_proposedAdmin;
   mapping(uint256 => bytes) internal s_checkData;
   mapping(address => MigrationPermission) internal s_peerRegistryMigrationPermission;
   Storage internal s_storage;
@@ -80,6 +84,7 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
   error GasLimitOutsideRange();
   error OnlyCallableByPayee();
   error OnlyCallableByProposedPayee();
+  error OnlyCallableByProposedAdmin();
   error GasLimitCanOnlyIncrease();
   error OnlyCallableByAdmin();
   error OnlyCallableByOwnerOrRegistrar();
@@ -155,6 +160,7 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
   event UpkeepCanceled(uint256 indexed id, uint64 indexed atBlockHeight);
   event UpkeepPaused(uint256 indexed id);
   event UpkeepUnpaused(uint256 indexed id);
+  event UpkeepCheckDataUpdated(uint256 indexed id, bytes newCheckData);
   event FundsAdded(uint256 indexed id, address indexed from, uint96 amount);
   event FundsWithdrawn(uint256 indexed id, uint256 amount, address to);
   event OwnerFundsWithdrawn(uint96 amount);
@@ -165,6 +171,8 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
   event PaymentWithdrawn(address indexed keeper, uint256 indexed amount, address indexed to, address payee);
   event PayeeshipTransferRequested(address indexed keeper, address indexed from, address indexed to);
   event PayeeshipTransferred(address indexed keeper, address indexed from, address indexed to);
+  event UpkeepAdminTransferRequested(uint256 indexed id, address indexed from, address indexed to);
+  event UpkeepAdminTransferred(uint256 indexed id, address indexed from, address indexed to);
   event UpkeepGasLimitSet(uint256 indexed id, uint96 gasLimit);
 
   /**
@@ -303,5 +311,48 @@ abstract contract KeeperRegistryBase is ConfirmedOwner, ExecutionPrevention, Ree
         fastGasWei: fastGasWei,
         linkEth: linkEth
       });
+  }
+
+  // MODIFIERS
+
+  /**
+   * @dev ensures a upkeep is valid
+   */
+  modifier validUpkeep(uint256 id) {
+    if (s_upkeep[id].maxValidBlocknumber <= block.number) revert UpkeepCancelled();
+    _;
+  }
+
+  /**
+   * @dev Reverts if called by anyone other than the admin of upkeep #id
+   */
+  modifier onlyUpkeepAdmin(uint256 id) {
+    if (msg.sender != s_upkeep[id].admin) revert OnlyCallableByAdmin();
+    _;
+  }
+
+  /**
+   * @dev Reverts if called on a cancelled upkeep
+   */
+  modifier onlyNonCanceledUpkeep(uint256 id) {
+    if (s_upkeep[id].maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled();
+    _;
+  }
+
+  /**
+   * @dev ensures that burns don't accidentally happen by sending to the zero
+   * address
+   */
+  modifier validRecipient(address to) {
+    if (to == ZERO_ADDRESS) revert InvalidRecipient();
+    _;
+  }
+
+  /**
+   * @dev Reverts if called by anyone other than the contract owner or registrar.
+   */
+  modifier onlyOwnerOrRegistrar() {
+    if (msg.sender != owner() && msg.sender != s_registrar) revert OnlyCallableByOwnerOrRegistrar();
+    _;
   }
 }
