@@ -125,7 +125,7 @@ func addSeparateChainlinkDeployments(
 					},
 				},
 				"stateful": true,
-				"capacity": "5Gi",
+				"capacity": "20Gi",
 			},
 		}))
 	}
