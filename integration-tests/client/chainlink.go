@@ -21,7 +21,10 @@ import (
 )
 
 // OneLINK representation of a single LINK token
-var OneLINK = big.NewFloat(1e18)
+var (
+	ChainlinkKeyPassword = "twochains"
+	OneLINK              = big.NewFloat(1e18)
+)
 
 type Chainlink struct {
 	APIClient         *resty.Client
@@ -828,6 +831,33 @@ func (c *Chainlink) Profile(profileTime time.Duration, profileFunction func(*Cha
 	profileResults.ActualRunSeconds = actualSeconds
 	profileResults.ScheduledProfileSeconds = profileSeconds
 	return profileResults, profileErrorGroup.Wait() // Wait for all the results of the profiled function to come in
+}
+
+// ExportEVMKeys exports Chainlink private EVM keys
+func (c *Chainlink) ExportEVMKeys() ([]*ExportedEVMKey, error) {
+	exportedKeys := make([]*ExportedEVMKey, 0)
+	keys, err := c.MustReadETHKeys()
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range keys.Data {
+		if key.Attributes.ETHBalance != "0" {
+			exportedKey := &ExportedEVMKey{}
+			_, err := c.APIClient.R().
+				SetResult(exportedKey).
+				SetQueryParam("newpassword", ChainlinkKeyPassword).
+				Post(fmt.Sprintf("/v2/keys/eth/export"))
+			if err != nil {
+				return nil, err
+			}
+			exportedKeys = append(exportedKeys, exportedKey)
+		}
+	}
+	log.Info().
+		Str("Node URL", c.Config.URL).
+		Str("Password", ChainlinkKeyPassword).
+		Msg("Exported EVM Keys")
+	return exportedKeys, nil
 }
 
 // SetPageSize globally sets the page

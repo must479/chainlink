@@ -33,6 +33,7 @@ var _ = Describe("OCR Feed @ocr", func() {
 			Entry("OCR suite on Sepolia Testnet @sepolia", networks.SepoliaTestnet, big.NewFloat(.1)),
 			Entry("OCR suite on Görli Testnet @goerli", networks.GoerliTestnet, big.NewFloat(.1)),
 			Entry("OCR suite on Klaytn Baobab @klaytn", networks.KlaytnBaobab, big.NewFloat(1)),
+			Entry("OCR suite on Arbitrum Goerli @arbitrum", networks.ArbitrumGoerli, big.NewFloat(.01)),
 		}
 
 		err               error
@@ -90,13 +91,12 @@ var _ = Describe("OCR Feed @ocr", func() {
 		Expect(err).ShouldNot(HaveOccurred(), "Creating mockserver clients shouldn't fail")
 
 		chainClient.ParallelTransactions(true)
-		Expect(err).ShouldNot(HaveOccurred())
 
 		linkTokenContract, err = contractDeployer.DeployLinkTokenContract()
 		Expect(err).ShouldNot(HaveOccurred(), "Deploying Link Token Contract shouldn't fail")
 
 		By("Funding Chainlink nodes")
-		err = actions.FundChainlinkNodes(chainlinkNodes, chainClient, funding)
+		err = actions.FundChainlinkNodes(chainlinkNodes[1:], chainClient, funding)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("Deploying OCR contracts")

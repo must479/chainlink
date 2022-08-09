@@ -3,7 +3,6 @@ module github.com/smartcontractkit/chainlink/integration-tests
 go 1.18
 
 require (
-	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/ethereum/go-ethereum v1.10.21
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/imdario/mergo v0.3.13
@@ -14,7 +13,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/slack-go/slack v0.11.2
 	github.com/smartcontractkit/chainlink-env v0.2.34
-	github.com/smartcontractkit/chainlink-testing-framework v1.5.7
+	github.com/smartcontractkit/chainlink-testing-framework v1.5.8
 	github.com/smartcontractkit/libocr v0.0.0-20220701150323-d815c8d0eab8
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/atomic v1.9.0
