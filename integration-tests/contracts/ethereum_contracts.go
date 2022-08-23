@@ -373,6 +373,9 @@ func NewFluxAggregatorRoundConfirmer(
 
 // ReceiveBlock will query the latest FluxAggregator round and check to see whether the round has confirmed
 func (f *FluxAggregatorRoundConfirmer) ReceiveBlock(block blockchain.NodeBlock) error {
+	if block.Block.Number() == nil {
+		return nil
+	}
 	if f.complete {
 		return nil
 	}
