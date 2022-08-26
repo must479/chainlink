@@ -169,7 +169,7 @@ var _ = Describe("VRFv2 suite @v2vrf", func() {
 			encodedProvingKeys = append(encodedProvingKeys, provingKey)
 		}
 
-		By("randomness is fulfilled")
+		By("Waiting for VRF Request to be Fulfilled")
 		words := uint32(10)
 		keyHash, err := coordinator.HashOfKey(context.Background(), encodedProvingKeys[0])
 		Expect(err).ShouldNot(HaveOccurred())
@@ -181,7 +181,7 @@ var _ = Describe("VRFv2 suite @v2vrf", func() {
 		Eventually(func(g Gomega) {
 			jobRuns, err := chainlinkNodes[0].MustReadRunsByJob(job.Data.ID)
 			g.Expect(err).ShouldNot(HaveOccurred())
-			g.Expect(len(jobRuns.Data)).Should(BeNumerically("==", 1))
+			g.Expect(len(jobRuns.Data)).Should(BeNumerically(">=", 1), "Expected the VRFv2 job to run at least once")
 			randomness, err := consumer.GetAllRandomWords(context.Background(), int(words))
 			g.Expect(err).ShouldNot(HaveOccurred())
 			for _, w := range randomness {

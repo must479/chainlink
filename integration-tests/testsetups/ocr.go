@@ -194,8 +194,8 @@ func (t *OCRSoakTest) processNewEvent(
 ) {
 	defer GinkgoRecover()
 
-	errorChan := make(chan error)
-	eventConfirmed := make(chan bool)
+	errorChan := make(chan error, 1)
+	eventConfirmed := make(chan bool, 1)
 	err := t.chainClient.ProcessEvent(eventDetails.Name, event, eventConfirmed, errorChan)
 	if err != nil {
 		log.Error().Err(err).Str("Hash", event.TxHash.Hex()).Str("Event", eventDetails.Name).Msg("Error trying to process event")
