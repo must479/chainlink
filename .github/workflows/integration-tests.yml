@@ -136,6 +136,7 @@ jobs:
           QA_AWS_REGION: ${{ secrets.QA_AWS_REGION }}
           QA_AWS_ROLE_TO_ASSUME: ${{ secrets.QA_AWS_ROLE_TO_ASSUME }}
           QA_KUBECONFIG: ${{ secrets.QA_KUBECONFIG }}
+          CGO_ENABLED: 1
 
       ## Run this step when changes that do not need the test to run are made
       - name: Run Setup
@@ -261,6 +262,7 @@ jobs:
           QA_AWS_REGION: ${{ secrets.QA_AWS_REGION }}
           QA_AWS_ROLE_TO_ASSUME: ${{ secrets.QA_AWS_ROLE_TO_ASSUME }}
           QA_KUBECONFIG: ${{ secrets.QA_KUBECONFIG }}
+          CGO_ENABLED: 1
       - name: cleanup
         if: always()
         uses: smartcontractkit/chainlink-github-actions/chainlink-testing-framework/cleanup@5ca2b0a07d534f216fb97ab54e69d3fdcf03de11 # v2.0.25
