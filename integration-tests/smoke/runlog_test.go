@@ -59,6 +59,11 @@ var _ = Describe("Direct request suite @runlog", func() {
 				big.NewFloat(1),
 				defaultRunlogEnv(networks.KlaytnBaobab),
 			),
+			Entry("Runlog suite on Arbitrum Goerli @arbitrum",
+				networks.ArbitrumGoerli,
+				big.NewFloat(.1),
+				defaultRunlogEnv(networks.ArbitrumGoerli),
+			),
 		}
 
 		err              error

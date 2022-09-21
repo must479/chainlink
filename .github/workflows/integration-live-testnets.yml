@@ -1,0 +1,62 @@
+name: Nightly Live Integration Tests
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  live_tests:
+    name: Live Smoke Tests
+    strategy:
+      matrix:
+        testnet: [metis, sepolia, goerli, klaytn, arbitrum]
+    environment: integration
+    permissions:
+      checks: write
+      pull-requests: write
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      CHAINLINK_COMMIT_SHA: develop.latest
+      CHAINLINK_ENV_USER: cron
+      TEST_TRIGGERED_BY: nightly-live-tests
+      TEST_LOG_LEVEL: debug
+      EVM_PRIVATE_KEYS:
+      EVM_URLS:
+    steps:
+      - name: Collect Metrics
+        id: collect-gha-metrics
+        uses: smartcontractkit/push-gha-metrics-action@v1
+        with:
+          basic-auth: ${{ secrets.GRAFANA_CLOUD_BASIC_AUTH }}
+          hostname: ${{ secrets.GRAFANA_CLOUD_HOST }}
+          this-job-name: Live Smoke Tests
+        continue-on-error: true
+      - name: Checkout the repo
+        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run Tests
+        env:
+          EVM_URLS: ${{ matrix.url }}
+        uses: smartcontractkit/chainlink-github-actions/chainlink-testing-framework/run-tests@1f3c81b148e53caaa0563f8963f884f0e5a4f82d # v2.0.15
+        with:
+          test_command_to_run: make test_smoke_raw args="-focus=@${{ matrix.testnet }}" # Cannot run same-chain tests in parallel for live testnets
+          test_download_vendor_packages_command: make gomod
+          test_download_ginkgo_command: make test_install_ginkgo
+          cl_repo: ${{ secrets.QA_AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ secrets.QA_AWS_REGION }}.amazonaws.com/chainlink
+          cl_image_tag: develop-nonroot # Uses latest develop build
+          artifacts_location: ./integration-tests/smoke/logs
+          publish_check_name: ${{ matrix.testnet }} Smoke Test Results
+          triggered_by: ${{ env.TEST_TRIGGERED_BY }}
+          QA_AWS_REGION: ${{ secrets.QA_AWS_REGION }}
+          QA_AWS_ROLE_TO_ASSUME: ${{ secrets.QA_AWS_ROLE_TO_ASSUME }}
+          QA_KUBECONFIG: ${{ secrets.QA_KUBECONFIG }}
+          CGO_ENABLED: "1"
+
+      ## Run Cleanup regardless
+      - name: cleanup
+        if: always()
+        uses: smartcontractkit/chainlink-github-actions/chainlink-testing-framework/cleanup@1f3c81b148e53caaa0563f8963f884f0e5a4f82d # v2.0.15
+        with:
+          triggered_by: ${{ env.TEST_TRIGGERED_BY }}

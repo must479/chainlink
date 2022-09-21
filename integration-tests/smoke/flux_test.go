@@ -62,6 +62,11 @@ var _ = Describe("Flux monitor suite @flux", func() {
 				big.NewFloat(1),
 				defaultFluxEnv(networks.KlaytnBaobab),
 			),
+			Entry("Flux monitor suite on Arbitrum Goerli @arbitrum",
+				networks.ArbitrumGoerli,
+				big.NewFloat(.01),
+				defaultFluxEnv(networks.ArbitrumGoerli),
+			),
 		}
 
 		err              error

@@ -49,6 +49,10 @@ var _ = Describe("Cronjob suite @cron", func() {
 				networks.KlaytnBaobab,
 				defaultCronEnv(networks.KlaytnBaobab),
 			),
+			Entry("Cronjob suite on Arbitrum Goerli @arbitrum",
+				networks.ArbitrumGoerli,
+				defaultCronEnv(networks.ArbitrumGoerli),
+			),
 		}
 
 		err             error

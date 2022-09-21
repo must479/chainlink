@@ -57,6 +57,11 @@ var _ = Describe("OCR Feed @ocr", func() {
 				big.NewFloat(1),
 				defaultOCREnv(networks.KlaytnBaobab),
 			),
+			Entry("OCR suite on Arbitrum Goerli @arbitrum",
+				networks.ArbitrumGoerli,
+				big.NewFloat(.1),
+				defaultOCREnv(networks.ArbitrumGoerli),
+			),
 		}
 
 		err               error
