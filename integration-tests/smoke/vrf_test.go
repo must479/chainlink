@@ -62,6 +62,11 @@ var _ = Describe("VRF suite @vrf", func() {
 				big.NewFloat(.05),
 				defaultVRFEnv(networks.ArbitrumGoerli),
 			),
+			Entry("VRF suite on Optimism Goerli @optimism",
+				networks.OptimismGoerli,
+				big.NewFloat(.05),
+				defaultVRFEnv(networks.OptimismGoerli),
+			),
 		}
 
 		testEnvironment *environment.Environment
