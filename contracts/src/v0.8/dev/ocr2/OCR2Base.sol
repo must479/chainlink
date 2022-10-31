@@ -253,13 +253,18 @@ abstract contract OCR2Base is ConfirmedOwner, OCR2Abstract {
 
   function _afterSetConfig(uint8 _f, bytes memory _onchainConfig) internal virtual;
 
-  function _report(
+  function _validateReport(
     bytes32 configDigest,
     uint40 epochAndRound,
     bytes memory report
   ) internal virtual;
 
-  function _payTransmitter(uint32 initialGas, address transmitter) internal virtual;
+  function _report(
+    uint32 initialGas,
+    address transmitter,
+    address[maxNumOracles] memory signers,
+    bytes calldata report
+  ) internal virtual;
 
   // The constant-length components of the msg.data sent to transmit.
   // See the "If we wanted to call sam" example on for example reasoning
@@ -319,7 +324,7 @@ abstract contract OCR2Base is ConfirmedOwner, OCR2Abstract {
       bytes32 configDigest = reportContext[0];
       uint32 epochAndRound = uint32(uint256(reportContext[1]));
 
-      _report(configDigest, epochAndRound, report);
+      _validateReport(configDigest, epochAndRound, report);
 
       emit Transmitted(configDigest, uint32(epochAndRound >> 8));
 
@@ -345,22 +350,23 @@ abstract contract OCR2Base is ConfirmedOwner, OCR2Abstract {
       );
     }
 
+    address[maxNumOracles] memory signed;
+
     {
       // Verify signatures attached to report
       bytes32 h = keccak256(abi.encodePacked(keccak256(report), reportContext));
-      bool[maxNumOracles] memory signed;
 
       Oracle memory o;
       for (uint256 i = 0; i < rs.length; ++i) {
         address signer = ecrecover(h, uint8(rawVs[i]) + 27, rs[i], ss[i]);
         o = s_oracles[signer];
         require(o.role == Role.Signer, "address not authorized to sign");
-        require(!signed[o.index], "non-unique signature");
-        signed[o.index] = true;
+        require(signed[o.index] == address(0), "non-unique signature");
+        signed[o.index] = signer;
       }
     }
 
     assert(initialGas < maxUint32);
-    _payTransmitter(uint32(initialGas), msg.sender);
+    _report(uint32(initialGas), msg.sender, signed, report);
   }
 }
