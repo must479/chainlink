@@ -266,8 +266,6 @@ func v2Routes(app chainlink.Application, r *gin.RouterGroup) {
 
 		cc := ConfigController{app}
 		authv2.GET("/config", cc.Show)
-		authv2.PATCH("/config", auth.RequiresAdminRole(cc.Patch))
-		authv2.GET("/config/dump-v1-as-v2", auth.RequiresAdminRole(cc.Dump))
 		authv2.GET("/config/v2", auth.RequiresAdminRole(cc.Show))
 
 		tas := TxAttemptsController{app}
@@ -385,10 +383,7 @@ func v2Routes(app chainlink.Application, r *gin.RouterGroup) {
 			{"terra", NewTerraChainsController(app)},
 		} {
 			chains.GET(chain.path, paginatedRequest(chain.cc.Index))
-			chains.POST(chain.path, auth.RequiresEditRole(chain.cc.Create))
 			chains.GET(chain.path+"/:ID", chain.cc.Show)
-			chains.PATCH(chain.path+"/:ID", auth.RequiresEditRole(chain.cc.Update))
-			chains.DELETE(chain.path+"/:ID", auth.RequiresEditRole(chain.cc.Delete))
 		}
 
 		nodes := authv2.Group("nodes")
@@ -404,13 +399,9 @@ func v2Routes(app chainlink.Application, r *gin.RouterGroup) {
 			if chain.path == "evm" {
 				// TODO still EVM only https://app.shortcut.com/chainlinklabs/story/26276/multi-chain-type-ui-node-chain-configuration
 				nodes.GET("", paginatedRequest(chain.nc.Index))
-				nodes.POST("", auth.RequiresEditRole(chain.nc.Create))
-				nodes.DELETE("/:ID", auth.RequiresEditRole(chain.nc.Delete))
 			}
 			nodes.GET(chain.path, paginatedRequest(chain.nc.Index))
 			chains.GET(chain.path+"/:ID/nodes", paginatedRequest(chain.nc.Index))
-			nodes.POST(chain.path, auth.RequiresEditRole(chain.nc.Create))
-			nodes.DELETE(chain.path+"/:ID", auth.RequiresEditRole(chain.nc.Delete))
 		}
 
 		efc := EVMForwardersController{app}

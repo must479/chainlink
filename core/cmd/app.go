@@ -6,14 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 
-	"github.com/smartcontractkit/chainlink/core/config"
 	v2 "github.com/smartcontractkit/chainlink/core/config/v2"
-	"github.com/smartcontractkit/chainlink/core/logger"
 	"github.com/smartcontractkit/chainlink/core/services/chainlink"
 	"github.com/smartcontractkit/chainlink/core/static"
 )
@@ -29,25 +26,9 @@ func removeHidden(cmds ...cli.Command) []cli.Command {
 	return ret
 }
 
-// https://app.shortcut.com/chainlinklabs/story/33622/remove-legacy-config
-func isDevMode() bool {
-	var clDev string
-	v1, v2 := os.Getenv("CHAINLINK_DEV"), os.Getenv("CL_DEV")
-	if v1 != "" && v2 != "" {
-		if v1 != v2 {
-			panic("you may only set one of CHAINLINK_DEV and CL_DEV environment variables, not both")
-		}
-	} else if v1 == "" {
-		clDev = v2
-	} else if v2 == "" {
-		clDev = v1
-	}
-	return strings.ToLower(clDev) == "true"
-}
-
 // NewApp returns the command-line parser/function-router for the given client
 func NewApp(client *Client) *cli.App {
-	devMode := isDevMode()
+	devMode := v2.EnvDev.IsTrue()
 	app := cli.NewApp()
 	app.Usage = "CLI for Chainlink"
 	app.Version = fmt.Sprintf("%v@%v", static.Version, static.Sha)
@@ -71,89 +52,70 @@ func NewApp(client *Client) *cli.App {
 		},
 		cli.StringSliceFlag{
 			Name:   "config, c",
-			Hidden: !devMode,
-			Usage:  "EXPERIMENTAL: TOML configuration file(s) via flag, or raw TOML via env var. If used, legacy env vars must not be set. Multiple files can be used (-c configA.toml -c configB.toml), and they are applied in order with duplicated fields overriding any earlier values.",
+			Usage:  "TOML configuration file(s) via flag, or raw TOML via env var. If used, legacy env vars must not be set. Multiple files can be used (-c configA.toml -c configB.toml), and they are applied in order with duplicated fields overriding any earlier values.",
 			EnvVar: "CL_CONFIG",
 		},
 		cli.StringFlag{
-			Name:   "secrets, s",
-			Hidden: !devMode,
-			Usage:  "EXPERIMENTAL: TOML configuration file for secrets. Must be set if and only if config is set.",
+			Name:  "secrets, s",
+			Usage: "TOML configuration file for secrets. Must be set if and only if config is set.",
 		},
 	}
 	app.Before = func(c *cli.Context) error {
-		if c.IsSet("config") {
-			// TOML
-			var opts chainlink.GeneralConfigOpts
-			if configTOML := v2.EnvConfig.Get(); configTOML != "" {
-				if err := opts.ParseConfig(configTOML); err != nil {
-					return errors.Wrapf(err, "failed to parse env var %q", v2.EnvConfig)
-				}
-			} else {
-				fileNames := c.StringSlice("config")
-				for _, fileName := range fileNames {
-					b, err := os.ReadFile(fileName)
-					if err != nil {
-						return errors.Wrapf(err, "failed to read config file: %s", fileName)
-					}
-					if err := opts.ParseConfig(string(b)); err != nil {
-						return errors.Wrapf(err, "failed to parse file: %s", fileName)
-					}
-				}
+		var opts chainlink.GeneralConfigOpts
+		if configTOML := v2.EnvConfig.Get(); configTOML != "" {
+			if err := opts.ParseConfig(configTOML); err != nil {
+				return errors.Wrapf(err, "failed to parse env var %q", v2.EnvConfig)
 			}
-
-			secretsTOML := ""
-			if c.IsSet("secrets") {
-				secretsFileName := c.String("secrets")
-				b, err := os.ReadFile(secretsFileName)
+		} else if c.IsSet("config") {
+			fileNames := c.StringSlice("config")
+			if len(fileNames) == 0 {
+				return errors.New("-config flag included but empty")
+			}
+			for _, fileName := range fileNames {
+				b, err := os.ReadFile(fileName)
 				if err != nil {
-					return errors.Wrapf(err, "failed to read secrets file: %s", secretsFileName)
+					return errors.Wrapf(err, "failed to read config file: %s", fileName)
 				}
-				secretsTOML = string(b)
+				if err := opts.ParseConfig(string(b)); err != nil {
+					return errors.Wrapf(err, "failed to parse file: %s", fileName)
+				}
 			}
-			if err := opts.ParseSecrets(secretsTOML); err != nil {
-				return err
-			}
-
-			if cfg, lggr, closeLggr, err := opts.NewAndLogger(); err != nil {
-				return err
-			} else {
-				client.Config = cfg
-				client.Logger = lggr
-				client.CloseLogger = closeLggr
-			}
-		} else {
-			// Legacy ENV
-			if c.IsSet("secrets") {
-				panic("secrets file must not be used without a core config file")
-			}
-			client.Logger, client.CloseLogger = logger.NewLogger()
-			client.Config = config.NewGeneralConfig(client.Logger)
 		}
-		logDeprecatedClientEnvWarnings(client.Logger)
+
+		secretsTOML := ""
+		if c.IsSet("secrets") {
+			secretsFileName := c.String("secrets")
+			b, err := os.ReadFile(secretsFileName)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read secrets file: %s", secretsFileName)
+			}
+			secretsTOML = string(b)
+		}
+		if err := opts.ParseSecrets(secretsTOML); err != nil {
+			return err
+		}
+
+		if cfg, lggr, closeLggr, err := opts.NewAndLogger(); err != nil {
+			return err
+		} else {
+			client.Config = cfg
+			client.Logger = lggr
+			client.CloseLogger = closeLggr
+		}
 		if c.Bool("json") {
 			client.Renderer = RendererJSON{Writer: os.Stdout}
 		}
 		urlStr := c.String("remote-node-url")
-		if envUrlStr := os.Getenv("CLIENT_NODE_URL"); envUrlStr != "" {
-			urlStr = envUrlStr
-		}
 		remoteNodeURL, err := url.Parse(urlStr)
 		if err != nil {
 			return errors.Wrapf(err, "%s is not a valid URL", urlStr)
 		}
 		insecureSkipVerify := c.Bool("insecure-skip-verify")
-		if envInsecureSkipVerify := os.Getenv("INSECURE_SKIP_VERIFY"); envInsecureSkipVerify == "true" {
-			insecureSkipVerify = true
-		}
 		clientOpts := ClientOpts{RemoteNodeURL: *remoteNodeURL, InsecureSkipVerify: insecureSkipVerify}
 		cookieAuth := NewSessionCookieAuthenticator(clientOpts, DiskCookieStore{Config: client.Config}, client.Logger)
 		sessionRequestBuilder := NewFileSessionRequestBuilder(client.Logger)
 
 		credentialsFile := c.String("admin-credentials-file")
-		if envCredentialsFile := os.Getenv("ADMIN_CREDENTIALS_FILE"); envCredentialsFile != "" {
-			credentialsFile = envCredentialsFile
-		}
 		sr, err := sessionRequestBuilder.Build(credentialsFile)
 		if err != nil && !errors.Is(errors.Cause(err), ErrNoCredentialFile) && !os.IsNotExist(err) {
 			return errors.Wrapf(err, "failed to load API credentials from file %s", credentialsFile)
@@ -341,16 +303,6 @@ func NewApp(client *Client) *cli.App {
 			Usage: "Commands for the node's configuration",
 			Subcommands: []cli.Command{
 				{
-					Name:   "dump",
-					Usage:  "LEGACY CONFIG (ENV) ONLY - Dump a TOML file equivalent to the current environment and database configuration",
-					Action: client.ConfigDump,
-				},
-				{
-					Name:   "list",
-					Usage:  "LEGACY CONFIG (ENV) ONLY - Show the node's environment variables",
-					Action: client.GetConfiguration,
-				},
-				{
 					Name:   "show",
 					Usage:  "V2 CONFIG (TOML) ONLY - Show the application configuration",
 					Action: client.ConfigV2,
@@ -358,21 +310,6 @@ func NewApp(client *Client) *cli.App {
 						cli.BoolFlag{
 							Name:  "user-only",
 							Usage: "If set, show only the user-provided TOML configuration, omitting application defaults",
-						},
-					},
-				},
-				{
-					Name:   "setgasprice",
-					Usage:  "Set the default gas price to use for outgoing transactions",
-					Action: client.SetEvmGasPriceDefault,
-					Flags: []cli.Flag{
-						cli.BoolFlag{
-							Name:  "gwei",
-							Usage: "Specify amount in gwei",
-						},
-						cli.StringFlag{
-							Name:  "evmChainID",
-							Usage: "(optional) specify the chain ID for which to make the update",
 						},
 					},
 				},
@@ -1224,16 +1161,4 @@ var whitespace = regexp.MustCompile(`\s+`)
 // format returns result of replacing all whitespace in s with a single space
 func format(s string) string {
 	return string(whitespace.ReplaceAll([]byte(s), []byte(" ")))
-}
-
-func logDeprecatedClientEnvWarnings(lggr logger.Logger) {
-	if s := os.Getenv("INSECURE_SKIP_VERIFY"); s != "" {
-		lggr.Error("INSECURE_SKIP_VERIFY env var has been deprecated and will be removed in a future release. Use flag instead: --insecure-skip-verify")
-	}
-	if s := os.Getenv("CLIENT_NODE_URL"); s != "" {
-		lggr.Errorf("CLIENT_NODE_URL env var has been deprecated and will be removed in a future release. Use flag instead: --remote-node-url=%s", s)
-	}
-	if s := os.Getenv("ADMIN_CREDENTIALS_FILE"); s != "" {
-		lggr.Errorf("ADMIN_CREDENTIALS_FILE env var has been deprecated and will be removed in a future release. Use flag instead: --admin-credentials-file=%s", s)
-	}
 }
