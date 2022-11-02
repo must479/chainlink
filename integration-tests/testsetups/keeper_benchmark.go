@@ -168,6 +168,8 @@ func (k *KeeperBenchmarkTest) Run() {
 		// Reset upkeeps so that they become eligible gradually after the test starts
 		actions.ResetUpkeeps(contractDeployer, k.chainClient, inputs.NumberOfContracts, inputs.BlockRange, inputs.BlockInterval, inputs.CheckGasToBurn,
 			inputs.PerformGasToBurn, inputs.FirstEligibleBuffer, k.keeperConsumerContracts[rIndex], inputs.UpkeepResetterAddress)
+		actions.ResetUpkeeps(contractDeployer, k.chainClient, 250, inputs.BlockRange, inputs.BlockInterval, 25000000,
+			inputs.PerformGasToBurn, inputs.FirstEligibleBuffer, k.keeperConsumerContracts[rIndex], inputs.UpkeepResetterAddress)
 		// Send keeper jobs to registry and chainlink nodes
 		actions.CreateKeeperJobsWithKeyIndex(k.chainlinkNodes, k.keeperRegistries[rIndex], rIndex)
 		for index, keeperConsumer := range k.keeperConsumerContracts[rIndex] {
