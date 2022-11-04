@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	evmclient "github.com/smartcontractkit/chainlink/core/chains/evm/client"
+	evmtypes "github.com/smartcontractkit/chainlink/core/chains/evm/types"
 	registry1_1 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/keeper_registry_wrapper1_1"
 	registry1_2 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/keeper_registry_wrapper1_2"
 	registry1_3 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/keeper_registry_wrapper1_3"
@@ -56,10 +57,10 @@ type RegistryWrapper struct {
 	contract1_1 *registry1_1.KeeperRegistry
 	contract1_2 *registry1_2.KeeperRegistry
 	contract1_3 *registry1_3.KeeperRegistry
-	evmClient   bind.ContractBackend
+	backend     evmclient.Client
 }
 
-func NewRegistryWrapper(address ethkey.EIP55Address, backend bind.ContractBackend) (*RegistryWrapper, error) {
+func NewRegistryWrapper(address ethkey.EIP55Address, backend evmclient.Client) (*RegistryWrapper, error) {
 	interface_wrapper, err := type_and_version.NewTypeAndVersionInterface(
 		address.Address(),
 		backend,
@@ -100,7 +101,7 @@ func NewRegistryWrapper(address ethkey.EIP55Address, backend bind.ContractBacken
 		contract1_1: contract1_1,
 		contract1_2: contract1_2,
 		contract1_3: contract1_3,
-		evmClient:   backend,
+		backend:     backend,
 	}, nil
 }
 
@@ -162,17 +163,17 @@ func (rw *RegistryWrapper) getUpkeepCount(opts *bind.CallOpts) (*big.Int, error)
 
 func (rw *RegistryWrapper) GetActiveUpkeepIDs(opts *bind.CallOpts) ([]*big.Int, error) {
 	if opts == nil || opts.BlockNumber.Int64() == 0 {
-		var header *types.Header
+		var head *evmtypes.Head
 		// fetch the current block number so batched GetActiveUpkeepIDs calls can be performed on the same block
-		header, err := rw.evmClient.HeaderByNumber(context.Background(), nil)
+		head, err := rw.backend.HeadByNumber(context.Background(), nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to fetch EVM block header")
 		}
 		if opts != nil {
-			opts.BlockNumber = header.Number
+			opts.BlockNumber = big.NewInt(head.Number)
 		} else {
 			opts = &bind.CallOpts{
-				BlockNumber: header.Number,
+				BlockNumber: big.NewInt(head.Number),
 			}
 		}
 	}

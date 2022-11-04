@@ -10,7 +10,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -18,6 +17,7 @@ import (
 	"github.com/smartcontractkit/chainlink/core/assets"
 	evmclient "github.com/smartcontractkit/chainlink/core/chains/evm/client"
 	"github.com/smartcontractkit/chainlink/core/chains/evm/txmgr"
+	evmtypes "github.com/smartcontractkit/chainlink/core/chains/evm/types"
 	v1 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_coordinator_interface"
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
 	"github.com/smartcontractkit/chainlink/core/internal/testutils"
@@ -266,9 +266,9 @@ func TestTransmitCheckers(t *testing.T) {
 					return [32]byte{1}, nil
 				}
 			},
-			HeaderByNumber: func(ctx context.Context, n *big.Int) (*types.Header, error) {
-				return &types.Header{
-					Number: big.NewInt(1),
+			HeadByNumber: func(ctx context.Context, n *big.Int) (*evmtypes.Head, error) {
+				return &evmtypes.Head{
+					Number: 1,
 				}, nil
 			},
 			RequestBlockNumber: big.NewInt(1),
@@ -291,7 +291,7 @@ func TestTransmitCheckers(t *testing.T) {
 		})
 
 		t.Run("can't get header", func(t *testing.T) {
-			checker.HeaderByNumber = func(ctx context.Context, n *big.Int) (*types.Header, error) {
+			checker.HeadByNumber = func(ctx context.Context, n *big.Int) (*evmtypes.Head, error) {
 				return nil, errors.New("can't get head")
 			}
 			tx, attempt := newTx(t, big.NewInt(3))
@@ -299,9 +299,9 @@ func TestTransmitCheckers(t *testing.T) {
 		})
 
 		t.Run("nil request block number", func(t *testing.T) {
-			checker.HeaderByNumber = func(ctx context.Context, n *big.Int) (*types.Header, error) {
-				return &types.Header{
-					Number: big.NewInt(1),
+			checker.HeadByNumber = func(ctx context.Context, n *big.Int) (*evmtypes.Head, error) {
+				return &evmtypes.Head{
+					Number: 1,
 				}, nil
 			}
 			checker.RequestBlockNumber = nil

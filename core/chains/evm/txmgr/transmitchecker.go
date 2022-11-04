@@ -6,10 +6,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 
 	evmclient "github.com/smartcontractkit/chainlink/core/chains/evm/client"
+	evmtypes "github.com/smartcontractkit/chainlink/core/chains/evm/types"
 	v1 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/solidity_vrf_coordinator_interface"
 	v2 "github.com/smartcontractkit/chainlink/core/gethwrappers/generated/vrf_coordinator_v2"
 	"github.com/smartcontractkit/chainlink/core/logger"
@@ -61,7 +61,7 @@ func (c *CheckerFactory) BuildChecker(spec TransmitCheckerSpec) (TransmitChecker
 		}
 		return &VRFV2Checker{
 			GetCommitment:      coord.GetCommitment,
-			HeaderByNumber:     c.Client.HeaderByNumber,
+			HeadByNumber:       c.Client.HeadByNumber,
 			RequestBlockNumber: spec.VRFRequestBlockNumber,
 		}, nil
 	case "":
@@ -200,9 +200,9 @@ type VRFV2Checker struct {
 	// Solidity contract.
 	GetCommitment func(opts *bind.CallOpts, requestID *big.Int) ([32]byte, error)
 
-	// HeaderByNumber fetches the header given the number. If nil is provided,
+	// HeadByNumber fetches the head given the number. If nil is provided,
 	// the latest header is fetched.
-	HeaderByNumber func(ctx context.Context, n *big.Int) (*gethtypes.Header, error)
+	HeadByNumber func(ctx context.Context, n *big.Int) (*evmtypes.Head, error)
 
 	// RequestBlockNumber is the block number of the VRFV2 request.
 	RequestBlockNumber *big.Int
@@ -232,7 +232,7 @@ func (v *VRFV2Checker) Check(
 		return nil
 	}
 
-	h, err := v.HeaderByNumber(ctx, nil)
+	h, err := v.HeadByNumber(ctx, nil)
 	if err != nil {
 		l.Errorw("Failed to fetch latest header. Attempting to transmit anyway.",
 			"err", err,
@@ -256,7 +256,7 @@ func (v *VRFV2Checker) Check(
 
 	// Subtract 5 since the newest block likely isn't indexed yet and will cause "header not found"
 	// errors.
-	latest := new(big.Int).Sub(h.Number, big.NewInt(5))
+	latest := new(big.Int).Sub(big.NewInt(h.Number), big.NewInt(5))
 	blockNumber := bigmath.Max(latest, v.RequestBlockNumber)
 	callback, err := v.GetCommitment(&bind.CallOpts{
 		Context:     ctx,
