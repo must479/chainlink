@@ -59,7 +59,7 @@ func (m *MultiStart) CloseBecause(reason error) (err error) {
 // MultiClose is a utility for closing multiple services concurrently.
 type MultiClose []io.Closer
 
-// Close closes alls service concurrently and collects any returned errors as a multierr.
+// Close closes all services concurrently and collects any returned errors as a multierr.
 func (m MultiClose) Close() (err error) {
 	if len(m) == 0 {
 		return nil
