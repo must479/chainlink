@@ -34,25 +34,25 @@ func BuildOCRConfigVars(chainlinkNodes []*client.Chainlink, registryConfig contr
 	S, oracleIdentities := getOracleIdentities(chainlinkNodes)
 
 	signerOnchainPublicKeys, transmitterAccounts, f, _, offchainConfigVersion, offchainConfig, err := confighelper.ContractSetConfigArgsForTests(
-		10*time.Second,       // deltaProgress time.Duration,
-		10*time.Second,       // deltaResend time.Duration,
-		3*time.Second,        // deltaRound time.Duration,
-		500*time.Millisecond, // deltaGrace time.Duration,
-		2*time.Second,        // deltaStage time.Duration,
-		3,                    // rMax uint8,
-		S,                    // s []int,
-		oracleIdentities,     // oracles []OracleIdentityExtra,
+		10*time.Second,                     // deltaProgress time.Duration,
+		10*time.Second,                     // deltaResend time.Duration,
+		2*time.Second+800*time.Millisecond, // deltaRound time.Duration,
+		500*time.Millisecond,               // deltaGrace time.Duration,
+		2*time.Second,                      // deltaStage time.Duration,
+		3,                                  // rMax uint8,
+		S,                                  // s []int,
+		oracleIdentities,                   // oracles []OracleIdentityExtra,
 		types2.OffchainConfig{
 			PerformLockoutWindow: 100 * 12 * 1000, // ~100 block lockout (on goerli)
 			UniqueReports:        false,           // set quorum requirements
-		}.Encode(),          // reportingPluginConfig []byte,
-		50*time.Millisecond, // maxDurationQuery time.Duration,
-		time.Second,         // maxDurationObservation time.Duration,
-		time.Second,         // maxDurationReport time.Duration,
-		50*time.Millisecond, // maxDurationShouldAcceptFinalizedReport time.Duration,
-		50*time.Millisecond, // maxDurationShouldTransmitAcceptedReport time.Duration,
-		1,                   // f int,
-		nil,                 // onchainConfig []byte,
+		}.Encode(), // reportingPluginConfig []byte,
+		50*time.Millisecond,                // maxDurationQuery time.Duration,
+		1*time.Second+600*time.Millisecond, // maxDurationObservation time.Duration,
+		700*time.Millisecond,               // maxDurationReport time.Duration,
+		50*time.Millisecond,                // maxDurationShouldAcceptFinalizedReport time.Duration,
+		50*time.Millisecond,                // maxDurationShouldTransmitAcceptedReport time.Duration,
+		1,                                  // f int,
+		nil,                                // onchainConfig []byte,
 	)
 	Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail ContractSetConfigArgsForTests")
 
@@ -220,6 +220,9 @@ func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string
 				OCRKeyBundleID:                    null.StringFrom(nodeOCRKeyId[keyIndex]),           // get node ocr2config.ID
 				TransmitterID:                     null.StringFrom(nodeTransmitterAddress[keyIndex]), // node addr
 				P2PV2Bootstrappers:                pq.StringArray{P2Pv2Bootstrapper},                 // bootstrap node key and address <p2p-key>@bootstrap:8000
+				PluginConfig: map[string]interface{}{
+					"MaxServiceWorkers": "100",
+				},
 			},
 		}
 		_, err = chainlinkNodes[nodeIndex].MustCreateJob(&autoOCR2JobSpec)
