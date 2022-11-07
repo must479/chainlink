@@ -45,7 +45,7 @@ func BuildOCRConfigVars(chainlinkNodes []*client.Chainlink, registryConfig contr
 		types2.OffchainConfig{
 			PerformLockoutWindow: 100 * 12 * 1000, // ~100 block lockout (on goerli)
 			UniqueReports:        false,           // set quorum requirements
-		}.Encode(), // reportingPluginConfig []byte,
+		}.Encode(),          // reportingPluginConfig []byte,
 		50*time.Millisecond, // maxDurationQuery time.Duration,
 		time.Second,         // maxDurationObservation time.Duration,
 		time.Second,         // maxDurationReport time.Duration,
@@ -114,12 +114,18 @@ func getOracleIdentities(chainlinkNodes []*client.Chainlink) ([]int, []confighel
 
 			address, err := cl.PrimaryEthAddress()
 			Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail getting primary ETH address from OCR node: index %d", i)
+			log.Debug().Str("ETH Address", address).Int("Node", i).Msg("Fetched PrimaryEthAddress")
 			ocr2Keys, err := cl.MustReadOCR2Keys()
 			Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail reading OCR2 keys from node")
 			var ocr2Config client.OCR2KeyAttributes
 			for _, key := range ocr2Keys.Data {
 				if key.Attributes.ChainType == string(chaintype.EVM) {
 					ocr2Config = key.Attributes
+					log.Debug().Str("OCR2 KeyID", key.ID).
+						Str("OCR2 OnChainPublicKey", ocr2Config.OnChainPublicKey).
+						Str("OCR2 ConfigPublicKey", ocr2Config.ConfigPublicKey).
+						Str("OCR2 OffChainPublicKey", ocr2Config.OffChainPublicKey).
+						Int("Node", i).Msg("Fetched OCR2Keys")
 					break
 				}
 			}
@@ -127,6 +133,7 @@ func getOracleIdentities(chainlinkNodes []*client.Chainlink) ([]int, []confighel
 			keys, err := cl.MustReadP2PKeys()
 			Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail reading P2P keys from node")
 			p2pKeyID := keys.Data[0].Attributes.PeerID
+			log.Debug().Str("P2P KeyID", p2pKeyID).Int("Node", i).Msg("Fetched P2PKeys")
 
 			offchainPkBytes, err := hex.DecodeString(strings.TrimPrefix(ocr2Config.OffChainPublicKey, "ocr2off_evm_"))
 			Expect(err).ShouldNot(HaveOccurred(), "failed to decode %s: %v", ocr2Config.OffChainPublicKey, err)
@@ -164,7 +171,7 @@ func getOracleIdentities(chainlinkNodes []*client.Chainlink) ([]int, []confighel
 }
 
 // CreateOCRKeeperJobs bootstraps the first node and to the other nodes sends ocr jobs
-func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string, chainID int64) {
+func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string, chainID int64, keyIndex int) {
 	bootstrapNode := chainlinkNodes[0]
 	bootstrapNode.RemoteIP()
 	bootstrapP2PIds, err := bootstrapNode.MustReadP2PKeys()
@@ -180,7 +187,7 @@ func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string
 			RelayConfig: map[string]interface{}{
 				"chainID": int(chainID),
 			},
-			ContractConfigTrackerPollInterval: *models.NewInterval(time.Second),
+			ContractConfigTrackerPollInterval: *models.NewInterval(15 * time.Second),
 		},
 	}
 	_, err = bootstrapNode.MustCreateJob(bootstrapSpec)
@@ -188,15 +195,14 @@ func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string
 	P2Pv2Bootstrapper := fmt.Sprintf("%s@%s:%d", bootstrapP2PId, bootstrapNode.RemoteIP(), 6690)
 
 	for nodeIndex := 1; nodeIndex < len(chainlinkNodes); nodeIndex++ {
-		nodeTransmitterAddress, err := chainlinkNodes[nodeIndex].PrimaryEthAddress()
+		nodeTransmitterAddress, err := chainlinkNodes[nodeIndex].EthAddresses()
 		Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail getting primary ETH address from OCR node %d", nodeIndex+1)
 		nodeOCRKeys, err := chainlinkNodes[nodeIndex].MustReadOCR2Keys()
 		Expect(err).ShouldNot(HaveOccurred(), "Shouldn't fail getting OCR keys from OCR node %d", nodeIndex+1)
-		var nodeOCRKeyId string
+		var nodeOCRKeyId []string
 		for _, key := range nodeOCRKeys.Data {
 			if key.Attributes.ChainType == string(chaintype.EVM) {
-				nodeOCRKeyId = key.ID
-				break
+				nodeOCRKeyId = append(nodeOCRKeyId, key.ID)
 			}
 		}
 
@@ -209,11 +215,11 @@ func CreateOCRKeeperJobs(chainlinkNodes []*client.Chainlink, registryAddr string
 				RelayConfig: map[string]interface{}{
 					"chainID": int(chainID),
 				},
-				ContractConfigTrackerPollInterval: *models.NewInterval(time.Second),
-				ContractID:                        registryAddr,                            // registryAddr
-				OCRKeyBundleID:                    null.StringFrom(nodeOCRKeyId),           // get node ocr2config.ID
-				TransmitterID:                     null.StringFrom(nodeTransmitterAddress), // node addr
-				P2PV2Bootstrappers:                pq.StringArray{P2Pv2Bootstrapper},       // bootstrap node key and address <p2p-key>@bootstrap:8000
+				ContractConfigTrackerPollInterval: *models.NewInterval(15 * time.Second),
+				ContractID:                        registryAddr,                                      // registryAddr
+				OCRKeyBundleID:                    null.StringFrom(nodeOCRKeyId[keyIndex]),           // get node ocr2config.ID
+				TransmitterID:                     null.StringFrom(nodeTransmitterAddress[keyIndex]), // node addr
+				P2PV2Bootstrappers:                pq.StringArray{P2Pv2Bootstrapper},                 // bootstrap node key and address <p2p-key>@bootstrap:8000
 			},
 		}
 		_, err = chainlinkNodes[nodeIndex].MustCreateJob(&autoOCR2JobSpec)

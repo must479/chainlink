@@ -104,7 +104,7 @@ var _ = Describe("Automation OCR Suite @keeper", func() {
 		)
 
 		By("Create OCR Automation Jobs")
-		actions.CreateOCRKeeperJobs(chainlinkNodes, registry.Address(), network.ChainID)
+		actions.CreateOCRKeeperJobs(chainlinkNodes, registry.Address(), network.ChainID, 0)
 		nodesWithoutBootstrap := chainlinkNodes[1:]
 		ocrConfig := actions.BuildOCRConfigVars(nodesWithoutBootstrap, registryConfig, registrar.Address())
 		err = registry.SetConfig(defaultRegistryConfig, ocrConfig)
