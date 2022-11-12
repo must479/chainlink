@@ -3,8 +3,9 @@ package utils_test
 import (
 	"testing"
 
-	"github.com/smartcontractkit/chainlink/core/utils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/smartcontractkit/chainlink/core/utils"
 )
 
 func TestMailbox(t *testing.T) {
@@ -14,7 +15,7 @@ func TestMailbox(t *testing.T) {
 	)
 
 	const capacity = 10
-	m := utils.NewMailbox[int](capacity)
+	m := utils.NewMailbox[int](capacity, t.Name())
 
 	// Queue deliveries
 	for i, d := range toDeliver {
@@ -42,7 +43,7 @@ func TestMailbox(t *testing.T) {
 		}
 	}()
 
-	close(m.Notify())
+	m.Close()
 	<-chDone
 
 	require.Equal(t, expected, recvd)
@@ -55,7 +56,7 @@ func TestMailbox_RetrieveAll(t *testing.T) {
 	)
 
 	const capacity = 10
-	m := utils.NewMailbox[int](capacity)
+	m := utils.NewMailbox[int](capacity, t.Name())
 
 	// Queue deliveries
 	for i, d := range toDeliver {
@@ -71,7 +72,7 @@ func TestMailbox_RetrieveAll(t *testing.T) {
 }
 
 func TestMailbox_NoEmptyReceivesWhenCapacityIsTwo(t *testing.T) {
-	m := utils.NewMailbox[int](2)
+	m := utils.NewMailbox[int](2, t.Name())
 
 	var (
 		recvd         []int
@@ -94,7 +95,7 @@ func TestMailbox_NoEmptyReceivesWhenCapacityIsTwo(t *testing.T) {
 	for i := 0; i < 100000; i++ {
 		m.Deliver(i)
 	}
-	close(m.Notify())
+	m.Close()
 
 	<-chDone
 	require.Len(t, emptyReceives, 0)

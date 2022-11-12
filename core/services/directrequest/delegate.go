@@ -15,6 +15,7 @@ import (
 	evmtypes "github.com/smartcontractkit/chainlink/core/chains/evm/types"
 	"github.com/smartcontractkit/chainlink/core/gethwrappers/generated/operator_wrapper"
 	"github.com/smartcontractkit/chainlink/core/logger"
+	"github.com/smartcontractkit/chainlink/core/services"
 	"github.com/smartcontractkit/chainlink/core/services/job"
 	"github.com/smartcontractkit/chainlink/core/services/pg"
 	"github.com/smartcontractkit/chainlink/core/services/pipeline"
@@ -94,8 +95,8 @@ func (d *Delegate) ServicesForSpec(jb job.Job) ([]job.ServiceCtx, error) {
 		pipelineRunner:           d.pipelineRunner,
 		pipelineORM:              d.pipelineORM,
 		job:                      jb,
-		mbOracleRequests:         utils.NewHighCapacityMailbox[log.Broadcast](),
-		mbOracleCancelRequests:   utils.NewHighCapacityMailbox[log.Broadcast](),
+		mbOracleRequests:         utils.NewHighCapacityMailbox[log.Broadcast](fmt.Sprintf("DirectRequest.Requests.%d", jb.PipelineSpec.JobID)),
+		mbOracleCancelRequests:   utils.NewHighCapacityMailbox[log.Broadcast](fmt.Sprintf("DirectRequest.Cancel.%d", jb.PipelineSpec.JobID)),
 		minIncomingConfirmations: concreteSpec.MinIncomingConfirmations.Uint32,
 		requesters:               concreteSpec.Requesters,
 		minContractPayment:       concreteSpec.MinContractPayment,
@@ -170,7 +171,7 @@ func (l *listener) Close() error {
 		close(l.chStop)
 		l.shutdownWaitGroup.Wait()
 
-		return nil
+		return services.MultiClose{l.mbOracleRequests, l.mbOracleCancelRequests}.Close()
 	})
 }
 

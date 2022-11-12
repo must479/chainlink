@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -61,7 +62,7 @@ func NewRegistrySynchronizer(opts RegistrySynchronizerOptions) *RegistrySynchron
 		job:                      opts.Job,
 		jrm:                      opts.JRM,
 		logBroadcaster:           opts.LogBroadcaster,
-		mbLogs:                   utils.NewMailbox[log.Broadcast](5000), // Arbitrary limit, better to have excess capacity
+		mbLogs:                   utils.NewMailbox[log.Broadcast](5_000, fmt.Sprintf("RegistrySynchronizer.Logs.%d", opts.Job.ID)), // Arbitrary limit, better to have excess capacity
 		minIncomingConfirmations: opts.MinIncomingConfirmations,
 		orm:                      opts.ORM,
 		effectiveKeeperAddress:   opts.EffectiveKeeperAddress,
@@ -108,7 +109,7 @@ func (rs *RegistrySynchronizer) Close() error {
 	return rs.StopOnce("RegistrySynchronizer", func() error {
 		close(rs.chStop)
 		rs.wgDone.Wait()
-		return nil
+		return rs.mbLogs.Close()
 	})
 }
 

@@ -61,14 +61,15 @@ func NewHeadTracker(
 ) httypes.HeadTracker {
 	chStop := make(chan struct{})
 	lggr = lggr.Named("HeadTracker")
+	id := ethClient.ChainID()
 	return &headTracker{
 		headBroadcaster: headBroadcaster,
 		ethClient:       ethClient,
-		chainID:         *ethClient.ChainID(),
+		chainID:         *id,
 		config:          config,
 		log:             lggr,
-		backfillMB:      utils.NewMailbox[*evmtypes.Head](1),
-		broadcastMB:     utils.NewMailbox[*evmtypes.Head](HeadsBufferSize),
+		backfillMB:      utils.NewSingleMailbox[*evmtypes.Head](),
+		broadcastMB:     utils.NewMailbox[*evmtypes.Head](HeadsBufferSize, fmt.Sprintf("HeadTracker.Broadcast.%s", id)),
 		chStop:          chStop,
 		headListener:    NewHeadListener(lggr, ethClient, config, chStop),
 		headSaver:       headSaver,
@@ -126,7 +127,7 @@ func (ht *headTracker) Close() error {
 	return ht.StopOnce("HeadTracker", func() error {
 		close(ht.chStop)
 		ht.wgDone.Wait()
-		return nil
+		return ht.broadcastMB.Close()
 	})
 }
 

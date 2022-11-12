@@ -166,16 +166,17 @@ var _ Broadcaster = (*broadcaster)(nil)
 func NewBroadcaster(orm ORM, ethClient evmclient.Client, config Config, lggr logger.Logger, highestSavedHead *evmtypes.Head) *broadcaster {
 	chStop := make(chan struct{})
 	lggr = lggr.Named("LogBroadcaster")
+	id := ethClient.ChainID()
 	return &broadcaster{
 		orm:                    orm,
 		config:                 config,
 		logger:                 lggr,
-		evmChainID:             *ethClient.ChainID(),
+		evmChainID:             *id,
 		ethSubscriber:          newEthSubscriber(ethClient, config, lggr, chStop),
-		registrations:          newRegistrations(lggr, *ethClient.ChainID()),
+		registrations:          newRegistrations(lggr, *id),
 		logPool:                newLogPool(lggr),
-		changeSubscriberStatus: utils.NewMailbox[changeSubscriberStatus](100000), // Seems unlikely we'd subscribe more than 100,000 times before LB start
-		newHeads:               utils.NewMailbox[*evmtypes.Head](1),
+		changeSubscriberStatus: utils.NewHighCapacityMailbox[changeSubscriberStatus](fmt.Sprintf("LogBroadcaster.ChangeSubscriber.%s", id)),
+		newHeads:               utils.NewSingleMailbox[*evmtypes.Head](),
 		DependentAwaiter:       utils.NewDependentAwaiter(),
 		chStop:                 chStop,
 		highestSavedHead:       highestSavedHead,
@@ -207,7 +208,7 @@ func (b *broadcaster) Close() error {
 	return b.StopOnce("LogBroadcaster", func() error {
 		close(b.chStop)
 		b.wgDone.Wait()
-		return nil
+		return b.changeSubscriberStatus.Close()
 	})
 }
 

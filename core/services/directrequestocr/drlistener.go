@@ -53,7 +53,7 @@ func NewDRListener(oracle *ocr2dr_oracle.OCR2DROracle, jb job.Job, runner pipeli
 		pipelineRunner: runner,
 		jobORM:         jobORM,
 		logBroadcaster: logBroadcaster,
-		mbOracleEvents: utils.NewHighCapacityMailbox[log.Broadcast](),
+		mbOracleEvents: utils.NewHighCapacityMailbox[log.Broadcast](fmt.Sprintf("DirectRequestListener.%d", jb.ID)),
 		chStop:         make(chan struct{}),
 		pluginORM:      pluginORM,
 		pluginConfig:   pluginConfig,
@@ -93,7 +93,7 @@ func (l *DRListener) Close() error {
 		close(l.chStop)
 		l.shutdownWaitGroup.Wait()
 
-		return nil
+		return l.mbOracleEvents.Close()
 	})
 }
 

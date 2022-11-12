@@ -146,7 +146,7 @@ func (d *Delegate) ServicesForSpec(jb job.Job) ([]job.ServiceCtx, error) {
 				d.pr,
 				d.ks.Eth(),
 				jb,
-				utils.NewHighCapacityMailbox[log.Broadcast](),
+				utils.NewHighCapacityMailbox[log.Broadcast](fmt.Sprintf("VRFListenerV2.%d", jb.ID)),
 				func() {},
 				GetStartingResponseCountsV2(d.q, lV2, chain.Client().ChainID().Uint64(), chain.Config().EvmFinalityDepth()),
 				chain.HeadBroadcaster(),
@@ -166,7 +166,7 @@ func (d *Delegate) ServicesForSpec(jb job.Job) ([]job.ServiceCtx, error) {
 				job:             jb,
 				// Note the mailbox size effectively sets a limit on how many logs we can replay
 				// in the event of a VRF outage.
-				reqLogs:            utils.NewHighCapacityMailbox[log.Broadcast](),
+				reqLogs:            utils.NewHighCapacityMailbox[log.Broadcast](fmt.Sprintf("VRFListener.%d", jb.ID)),
 				chStop:             make(chan struct{}),
 				waitOnStop:         make(chan struct{}),
 				newHead:            make(chan struct{}, 1),

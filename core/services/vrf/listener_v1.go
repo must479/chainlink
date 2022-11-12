@@ -458,7 +458,7 @@ func (lsn *listenerV1) Close() error {
 		close(lsn.chStop)
 		<-lsn.waitOnStop // Log listenerV1
 		<-lsn.waitOnStop // Head listenerV1
-		return nil
+		return lsn.reqLogs.Close()
 	})
 }
 

@@ -128,7 +128,7 @@ func NewOCRContractTracker(
 		nil,
 		offchainaggregator.OffchainAggregatorRoundRequested{},
 		sync.RWMutex{},
-		*utils.NewMailbox[ocrtypes.ContractConfig](configMailboxSanityLimit),
+		*utils.NewMailbox[ocrtypes.ContractConfig](configMailboxSanityLimit, fmt.Sprintf("OCRContractTracker.%d", jobID)),
 		make(chan ocrtypes.ContractConfig),
 		-1,
 		sync.RWMutex{},
@@ -174,7 +174,7 @@ func (t *OCRContractTracker) Close() error {
 		t.unsubscribeHeads()
 		t.unsubscribeLogs()
 		close(t.chConfigs)
-		return nil
+		return t.configsMB.Close()
 	})
 }
 

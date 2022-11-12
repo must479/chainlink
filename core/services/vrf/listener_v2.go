@@ -1155,7 +1155,7 @@ func (lsn *listenerV2) Close() error {
 		close(lsn.chStop)
 		// wait on the request handler, log listener, and head listener to stop
 		lsn.wg.Wait()
-		return nil
+		return lsn.reqLogs.Close()
 	})
 }
 
