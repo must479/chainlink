@@ -1,0 +1,36 @@
+name: clean
+
+on:
+  pull_request:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  clean:
+    name: clean
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect Metrics
+        id: collect-gha-metrics
+        uses: smartcontractkit/push-gha-metrics-action@v1
+        with:
+          basic-auth: ${{ secrets.GRAFANA_CLOUD_BASIC_AUTH }}
+          hostname: ${{ secrets.GRAFANA_CLOUD_HOST }}
+          this-job-name: clean
+        continue-on-error: true
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - run: make mockery
+      - run: make abigen
+      - run: make gomodtidy
+      - name: tidy was clean
+        run: git diff --minimal --exit-code
+      - run: make generate
+      - name: generate was clean
+        run: git diff --stat --exit-code
