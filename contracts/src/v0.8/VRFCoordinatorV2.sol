@@ -1,31 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import "./interfaces/LinkTokenInterface.sol";
-import "./interfaces/BlockhashStoreInterface.sol";
-import "./interfaces/AggregatorV3Interface.sol";
-import "./interfaces/VRFCoordinatorV2Interface.sol";
-import "./interfaces/TypeAndVersionInterface.sol";
-import "./interfaces/ERC677ReceiverInterface.sol";
-import "./VRF.sol";
-import "./ConfirmedOwner.sol";
-import "./VRFConsumerBaseV2.sol";
+import "../../interfaces/LinkTokenInterface.sol";
+import "../../interfaces/AggregatorV3Interface.sol";
+import "../interfaces/OCR2DRRegistryInterface.sol";
+import "../interfaces/OCR2DRBillableInterface.sol";
+import "../interfaces/OCR2DRClientInterface.sol";
+import "../../interfaces/TypeAndVersionInterface.sol";
+import "../../interfaces/ERC677ReceiverInterface.sol";
+import "../../ConfirmedOwner.sol";
 
-contract VRFCoordinatorV2 is
-  VRF,
-  ConfirmedOwner,
-  TypeAndVersionInterface,
-  VRFCoordinatorV2Interface,
-  ERC677ReceiverInterface
-{
+contract OCR2DRRegistry is ConfirmedOwner, TypeAndVersionInterface, OCR2DRRegistryInterface, ERC677ReceiverInterface {
   LinkTokenInterface public immutable LINK;
   AggregatorV3Interface public immutable LINK_ETH_FEED;
-  BlockhashStoreInterface public immutable BLOCKHASH_STORE;
 
   // We need to maintain a list of consuming addresses.
   // This bound ensures we are able to loop over them as needed.
   // Should a user require more consumers, they can use multiple subscriptions.
   uint16 public constant MAX_CONSUMERS = 100;
+  // 5k is plenty for an EXTCODESIZE call (2600) + warm CALL (100)
+  // and some arithmetic operations.
+  uint256 private constant GAS_FOR_CALL_EXACT_CHECK = 5_000;
+  // Maximum number of oracles DON can support
+  // Needs to match OCR2Abstract.sol
+  uint256 internal constant maxNumOracles = 31;
+  // Set this maximum to 200 to give us a 56 block window to fulfill
+  uint16 public constant MAX_REQUEST_CONFIRMATIONS = 200;
+
   error TooManyConsumers();
   error InsufficientBalance();
   error InvalidConsumer(uint64 subId, address consumer);
@@ -33,16 +34,15 @@ contract VRFCoordinatorV2 is
   error OnlyCallableFromLink();
   error InvalidCalldata();
   error MustBeSubOwner(address owner);
+  error MustBeAllowedDon();
   error PendingRequestExists();
   error MustBeRequestedOwner(address proposedOwner);
   error BalanceInvariantViolated(uint256 internalBalance, uint256 externalBalance); // Should never happen
   event FundsRecovered(address to, uint256 amount);
-  // We use the subscription struct (1 word)
-  // at fulfillment time.
+
   struct Subscription {
     // There are only 1e9*1e18 = 1e27 juels in existence, so the balance can fit in uint96 (2^96 ~ 7e28)
     uint96 balance; // Common link balance used for all consumer requests.
-    uint64 reqCount; // For fee tiers
   }
   // We use the config for the mgmt APIs
   struct SubscriptionConfig {
@@ -79,18 +79,11 @@ contract VRFCoordinatorV2 is
   event SubscriptionOwnerTransferRequested(uint64 indexed subId, address from, address to);
   event SubscriptionOwnerTransferred(uint64 indexed subId, address from, address to);
 
-  // Set this maximum to 200 to give us a 56 block window to fulfill
-  // the request before requiring the block hash feeder.
-  uint16 public constant MAX_REQUEST_CONFIRMATIONS = 200;
-  uint32 public constant MAX_NUM_WORDS = 500;
-  // 5k is plenty for an EXTCODESIZE call (2600) + warm CALL (100)
-  // and some arithmetic operations.
-  uint256 private constant GAS_FOR_CALL_EXACT_CHECK = 5_000;
-  error InvalidRequestConfirmations(uint16 have, uint16 min, uint16 max);
+  error InvalidRequestConfirmations(uint32 have, uint32 min, uint32 max);
   error GasLimitTooBig(uint32 have, uint32 want);
   error NumWordsTooBig(uint32 have, uint32 want);
-  error ProvingKeyAlreadyRegistered(bytes32 keyHash);
-  error NoSuchProvingKey(bytes32 keyHash);
+  error DonAlreadyRegistered(address don);
+  error NoSuchDon(address don);
   error InvalidLinkWeiPrice(int256 linkWei);
   error InsufficientGasForConsumer(uint256 have, uint256 want);
   error NoCorrespondingRequest();
@@ -98,36 +91,34 @@ contract VRFCoordinatorV2 is
   error BlockhashNotInStore(uint256 blockNum);
   error PaymentTooLarge();
   error Reentrant();
-  struct RequestCommitment {
-    uint64 blockNum;
-    uint64 subId;
-    uint32 callbackGasLimit;
-    uint32 numWords;
-    address sender;
-  }
-  mapping(bytes32 => address) /* keyHash */ /* oracle */
-    private s_provingKeys;
-  bytes32[] private s_provingKeyHashes;
+
+  mapping(address => bool) /* DON */ /* is DON allowed */
+    private s_allowedDons;
+  address[] private s_dons;
   mapping(address => uint96) /* oracle */ /* LINK balance */
     private s_withdrawableTokens;
-  mapping(uint256 => bytes32) /* requestID */ /* commitment */
+  struct Commitment {
+    OCR2DRRegistryInterface.RequestBilling billing;
+    address don;
+    uint96 donFee;
+    uint96 registryFee;
+  }
+  mapping(bytes32 => Commitment) /* requestID */ /* Commitment */
     private s_requestCommitments;
-  event ProvingKeyRegistered(bytes32 keyHash, address indexed oracle);
-  event ProvingKeyDeregistered(bytes32 keyHash, address indexed oracle);
-  event RandomWordsRequested(
-    bytes32 indexed keyHash,
-    uint256 requestId,
-    uint256 preSeed,
-    uint64 indexed subId,
-    uint16 minimumRequestConfirmations,
+  event DonRegistered(address indexed don);
+  event DonDeregistered(address indexed don);
+  event BillingStart(
+    address indexed don,
+    bytes32 requestId,
+    uint64 indexed subscriptionId,
+    uint32 minimumRequestConfirmations,
     uint32 callbackGasLimit,
-    uint32 numWords,
     address indexed sender
   );
-  event RandomWordsFulfilled(uint256 indexed requestId, uint256 outputSeed, uint96 payment, bool success);
+  event BillingEnd(bytes32 indexed requestId, uint96 payment, bool success);
 
   struct Config {
-    uint16 minimumRequestConfirmations;
+    uint32 minimumRequestConfirmations;
     uint32 maxGasLimit;
     // Reentrancy protection.
     bool reentrancyLock;
@@ -137,95 +128,67 @@ contract VRFCoordinatorV2 is
     // Gas to cover oracle payment after we calculate the payment.
     // We make it configurable in case those operations are repriced.
     uint32 gasAfterPaymentCalculation;
+    // Represents the average gas execution cost. Used in estimating cost beforehand.
+    uint32 gasOverhead;
   }
   int256 private s_fallbackWeiPerUnitLink;
   Config private s_config;
-  FeeConfig private s_feeConfig;
-  struct FeeConfig {
-    // Flat fee charged per fulfillment in millionths of link
-    // So fee range is [0, 2^32/10^6].
-    uint32 fulfillmentFlatFeeLinkPPMTier1;
-    uint32 fulfillmentFlatFeeLinkPPMTier2;
-    uint32 fulfillmentFlatFeeLinkPPMTier3;
-    uint32 fulfillmentFlatFeeLinkPPMTier4;
-    uint32 fulfillmentFlatFeeLinkPPMTier5;
-    uint24 reqsForTier2;
-    uint24 reqsForTier3;
-    uint24 reqsForTier4;
-    uint24 reqsForTier5;
-  }
   event ConfigSet(
     uint16 minimumRequestConfirmations,
     uint32 maxGasLimit,
     uint32 stalenessSeconds,
     uint32 gasAfterPaymentCalculation,
     int256 fallbackWeiPerUnitLink,
-    FeeConfig feeConfig
+    uint32 gasOverhead
   );
 
-  constructor(
-    address link,
-    address blockhashStore,
-    address linkEthFeed
-  ) ConfirmedOwner(msg.sender) {
+  constructor(address link, address linkEthFeed) ConfirmedOwner(msg.sender) {
     LINK = LinkTokenInterface(link);
     LINK_ETH_FEED = AggregatorV3Interface(linkEthFeed);
-    BLOCKHASH_STORE = BlockhashStoreInterface(blockhashStore);
   }
 
   /**
-   * @notice Registers a proving key to an oracle.
-   * @param oracle address of the oracle
-   * @param publicProvingKey key that oracle can use to submit vrf fulfillments
+   * @notice Registers a new Decentralized Oracle Network (DON).
+   * @param don address of the DON
    */
-  function registerProvingKey(address oracle, uint256[2] calldata publicProvingKey) external onlyOwner {
-    bytes32 kh = hashOfKey(publicProvingKey);
-    if (s_provingKeys[kh] != address(0)) {
-      revert ProvingKeyAlreadyRegistered(kh);
+  function registerDon(address don) external onlyOwner {
+    // NOTE: could validate vesion of OCR2DROracle contract here
+    if (s_allowedDons[don] == true) {
+      revert DonAlreadyRegistered(don);
     }
-    s_provingKeys[kh] = oracle;
-    s_provingKeyHashes.push(kh);
-    emit ProvingKeyRegistered(kh, oracle);
+    s_allowedDons[don] = true;
+    s_dons.push(don);
+    emit DonRegistered(don);
   }
 
   /**
-   * @notice Deregisters a proving key to an oracle.
-   * @param publicProvingKey key that oracle can use to submit vrf fulfillments
+   * @notice Deregisters a Decentralized Oracle Network (DON).
+   * @param don address of the DON
    */
-  function deregisterProvingKey(uint256[2] calldata publicProvingKey) external onlyOwner {
-    bytes32 kh = hashOfKey(publicProvingKey);
-    address oracle = s_provingKeys[kh];
-    if (oracle == address(0)) {
-      revert NoSuchProvingKey(kh);
+  function deregisterDon(address don) external onlyOwner {
+    if (s_allowedDons[don] == false) {
+      revert NoSuchDon(don);
     }
-    delete s_provingKeys[kh];
-    for (uint256 i = 0; i < s_provingKeyHashes.length; i++) {
-      if (s_provingKeyHashes[i] == kh) {
-        bytes32 last = s_provingKeyHashes[s_provingKeyHashes.length - 1];
-        // Copy last element and overwrite kh to be deleted with it
-        s_provingKeyHashes[i] = last;
-        s_provingKeyHashes.pop();
+    delete s_allowedDons[don];
+    for (uint256 i = 0; i < s_dons.length; i++) {
+      if (s_dons[i] == don) {
+        address last = s_dons[s_dons.length - 1];
+        // Copy last element and overwrite don to be deleted with it
+        s_dons[i] = last;
+        s_dons.pop();
       }
     }
-    emit ProvingKeyDeregistered(kh, oracle);
+    emit DonDeregistered(don);
   }
 
   /**
-   * @notice Returns the proving key hash key associated with this public key
-   * @param publicKey the key to return the hash of
-   */
-  function hashOfKey(uint256[2] memory publicKey) public pure returns (bytes32) {
-    return keccak256(abi.encode(publicKey));
-  }
-
-  /**
-   * @notice Sets the configuration of the vrfv2 coordinator
+   * @notice Sets the configuration of the OCR2DR registry
    * @param minimumRequestConfirmations global min for request confirmations
    * @param maxGasLimit global max for request gas limit
    * @param stalenessSeconds if the eth/link feed is more stale then this, use the fallback price
    * @param gasAfterPaymentCalculation gas used in doing accounting after completing the gas measurement
    * @param fallbackWeiPerUnitLink fallback eth/link price in the case of a stale feed
-   * @param feeConfig fee tier configuration
+   * @param gasOverhead fallback eth/link price in the case of a stale feed
    */
   function setConfig(
     uint16 minimumRequestConfirmations,
@@ -233,7 +196,7 @@ contract VRFCoordinatorV2 is
     uint32 stalenessSeconds,
     uint32 gasAfterPaymentCalculation,
     int256 fallbackWeiPerUnitLink,
-    FeeConfig memory feeConfig
+    uint32 gasOverhead
   ) external onlyOwner {
     if (minimumRequestConfirmations > MAX_REQUEST_CONFIRMATIONS) {
       revert InvalidRequestConfirmations(
@@ -250,9 +213,9 @@ contract VRFCoordinatorV2 is
       maxGasLimit: maxGasLimit,
       stalenessSeconds: stalenessSeconds,
       gasAfterPaymentCalculation: gasAfterPaymentCalculation,
-      reentrancyLock: false
+      reentrancyLock: false,
+      gasOverhead: gasOverhead
     });
-    s_feeConfig = feeConfig;
     s_fallbackWeiPerUnitLink = fallbackWeiPerUnitLink;
     emit ConfigSet(
       minimumRequestConfirmations,
@@ -260,53 +223,38 @@ contract VRFCoordinatorV2 is
       stalenessSeconds,
       gasAfterPaymentCalculation,
       fallbackWeiPerUnitLink,
-      s_feeConfig
+      gasOverhead
     );
   }
 
+  /**
+   * @notice Gets the configuration of the OCR2DR registry
+   * @return minimumRequestConfirmations global min for request confirmations
+   * @return maxGasLimit global max for request gas limit
+   * @return stalenessSeconds if the eth/link feed is more stale then this, use the fallback price
+   * @return gasAfterPaymentCalculation gas used in doing accounting after completing the gas measurement
+   * @return fallbackWeiPerUnitLink fallback eth/link price in the case of a stale feed
+   * @return gasOverhead fallback eth/link price in the case of a stale feed
+   */
   function getConfig()
     external
     view
     returns (
-      uint16 minimumRequestConfirmations,
+      uint32 minimumRequestConfirmations,
       uint32 maxGasLimit,
       uint32 stalenessSeconds,
-      uint32 gasAfterPaymentCalculation
+      uint32 gasAfterPaymentCalculation,
+      int256 fallbackWeiPerUnitLink,
+      uint32 gasOverhead
     )
   {
     return (
       s_config.minimumRequestConfirmations,
       s_config.maxGasLimit,
       s_config.stalenessSeconds,
-      s_config.gasAfterPaymentCalculation
-    );
-  }
-
-  function getFeeConfig()
-    external
-    view
-    returns (
-      uint32 fulfillmentFlatFeeLinkPPMTier1,
-      uint32 fulfillmentFlatFeeLinkPPMTier2,
-      uint32 fulfillmentFlatFeeLinkPPMTier3,
-      uint32 fulfillmentFlatFeeLinkPPMTier4,
-      uint32 fulfillmentFlatFeeLinkPPMTier5,
-      uint24 reqsForTier2,
-      uint24 reqsForTier3,
-      uint24 reqsForTier4,
-      uint24 reqsForTier5
-    )
-  {
-    return (
-      s_feeConfig.fulfillmentFlatFeeLinkPPMTier1,
-      s_feeConfig.fulfillmentFlatFeeLinkPPMTier2,
-      s_feeConfig.fulfillmentFlatFeeLinkPPMTier3,
-      s_feeConfig.fulfillmentFlatFeeLinkPPMTier4,
-      s_feeConfig.fulfillmentFlatFeeLinkPPMTier5,
-      s_feeConfig.reqsForTier2,
-      s_feeConfig.reqsForTier3,
-      s_feeConfig.reqsForTier4,
-      s_feeConfig.reqsForTier5
+      s_config.gasAfterPaymentCalculation,
+      s_fallbackWeiPerUnitLink,
+      s_config.gasOverhead
     );
   }
 
@@ -349,48 +297,95 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function getRequestConfig()
     external
     view
     override
     returns (
-      uint16,
       uint32,
-      bytes32[] memory
+      uint32,
+      address[] memory
     )
   {
-    return (s_config.minimumRequestConfirmations, s_config.maxGasLimit, s_provingKeyHashes);
+    return (s_config.minimumRequestConfirmations, s_config.maxGasLimit, s_dons);
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
-  function requestRandomWords(
-    bytes32 keyHash,
-    uint64 subId,
-    uint16 requestConfirmations,
-    uint32 callbackGasLimit,
-    uint32 numWords
-  ) external override nonReentrant returns (uint256) {
+  function getRequiredFee(
+    bytes calldata, /* data */
+    OCR2DRRegistryInterface.RequestBilling calldata /* billing */
+  ) public pure override returns (uint96) {
+    // NOTE: Optionally, compute additional fee here
+    return 0;
+  }
+
+  /**
+   * @inheritdoc OCR2DRRegistryInterface
+   */
+  function estimateExecutionGas(OCR2DRRegistryInterface.RequestBilling calldata billing)
+    public
+    view
+    override
+    returns (uint256)
+  {
+    return s_config.gasOverhead + s_config.gasAfterPaymentCalculation + billing.gasLimit;
+  }
+
+  /**
+   * @inheritdoc OCR2DRRegistryInterface
+   */
+  function estimateCost(
+    bytes calldata data,
+    OCR2DRRegistryInterface.RequestBilling calldata billing,
+    uint96 donRequiredFee
+  ) public view override returns (uint96) {
+    int256 weiPerUnitLink;
+    weiPerUnitLink = getFeedData();
+    if (weiPerUnitLink <= 0) {
+      revert InvalidLinkWeiPrice(weiPerUnitLink);
+    }
+    uint256 executionGas = estimateExecutionGas(billing);
+    // (1e18 juels/link) (wei/gas * gas) / (wei/link) = juels
+    uint256 paymentNoFee = (1e18 * tx.gasprice * executionGas) / uint256(weiPerUnitLink);
+    uint96 registryFee = getRequiredFee(data, billing);
+    uint256 fee = uint256(donRequiredFee) + uint256(registryFee);
+    if (paymentNoFee > (1e27 - fee)) {
+      revert PaymentTooLarge(); // Payment + fee cannot be more than all of the link in existence.
+    }
+    return uint96(paymentNoFee + fee);
+  }
+
+  /**
+   * @inheritdoc OCR2DRRegistryInterface
+   */
+  function beginBilling(bytes calldata data, RequestBilling calldata billing)
+    external
+    override
+    onlyAllowedDons
+    nonReentrant
+    returns (bytes32)
+  {
     // Input validation using the subscription storage.
-    if (s_subscriptionConfigs[subId].owner == address(0)) {
+    if (s_subscriptionConfigs[billing.subscriptionId].owner == address(0)) {
       revert InvalidSubscription();
     }
-    // Its important to ensure that the consumer is in fact who they say they
+    // It's important to ensure that the consumer is in fact who they say they
     // are, otherwise they could use someone else's subscription balance.
     // A nonce of 0 indicates consumer is not allocated to the sub.
-    uint64 currentNonce = s_consumers[msg.sender][subId];
+    uint64 currentNonce = s_consumers[billing.client][billing.subscriptionId];
     if (currentNonce == 0) {
-      revert InvalidConsumer(subId, msg.sender);
+      revert InvalidConsumer(billing.subscriptionId, billing.client);
     }
     // Input validation using the config storage word.
     if (
-      requestConfirmations < s_config.minimumRequestConfirmations || requestConfirmations > MAX_REQUEST_CONFIRMATIONS
+      billing.confirmations < s_config.minimumRequestConfirmations || billing.confirmations > MAX_REQUEST_CONFIRMATIONS
     ) {
       revert InvalidRequestConfirmations(
-        requestConfirmations,
+        billing.confirmations,
         s_config.minimumRequestConfirmations,
         MAX_REQUEST_CONFIRMATIONS
       );
@@ -398,53 +393,73 @@ contract VRFCoordinatorV2 is
     // No lower bound on the requested gas limit. A user could request 0
     // and they would simply be billed for the proof verification and wouldn't be
     // able to do anything with the random value.
-    if (callbackGasLimit > s_config.maxGasLimit) {
-      revert GasLimitTooBig(callbackGasLimit, s_config.maxGasLimit);
+    if (billing.gasLimit > s_config.maxGasLimit) {
+      revert GasLimitTooBig(billing.gasLimit, s_config.maxGasLimit);
     }
-    if (numWords > MAX_NUM_WORDS) {
-      revert NumWordsTooBig(numWords, MAX_NUM_WORDS);
+
+    // Check that subscription can afford the estimated cost
+    uint256 estimatedCost = estimateCost(
+      data,
+      billing,
+      OCR2DRBillableInterface(msg.sender).getRequiredFee(data, billing)
+    );
+    if (s_subscriptions[billing.subscriptionId].balance < estimatedCost) {
+      revert InsufficientBalance();
     }
-    // Note we do not check whether the keyHash is valid to save gas.
-    // The consequence for users is that they can send requests
-    // for invalid keyHashes which will simply not be fulfilled.
+
     uint64 nonce = currentNonce + 1;
-    (uint256 requestId, uint256 preSeed) = computeRequestId(keyHash, msg.sender, subId, nonce);
+    (bytes32 requestId, ) = computeRequestId(msg.sender, billing.client, billing.subscriptionId, nonce);
 
-    s_requestCommitments[requestId] = keccak256(
-      abi.encode(requestId, block.number, subId, callbackGasLimit, numWords, msg.sender)
+    s_requestCommitments[requestId] = Commitment(
+      billing,
+      msg.sender,
+      OCR2DRBillableInterface(msg.sender).getRequiredFee(data, billing),
+      getRequiredFee(data, billing)
     );
-    emit RandomWordsRequested(
-      keyHash,
+
+    emit BillingStart(
+      msg.sender,
       requestId,
-      preSeed,
-      subId,
-      requestConfirmations,
-      callbackGasLimit,
-      numWords,
-      msg.sender
+      billing.subscriptionId,
+      billing.confirmations,
+      billing.gasLimit,
+      billing.client
     );
-    s_consumers[msg.sender][subId] = nonce;
-
+    s_consumers[billing.client][billing.subscriptionId] = nonce;
     return requestId;
   }
 
   /**
-   * @notice Get request commitment
-   * @param requestId id of request
-   * @dev used to determine if a request is fulfilled or not
+   * @inheritdoc OCR2DRRegistryInterface
    */
-  function getCommitment(uint256 requestId) external view returns (bytes32) {
-    return s_requestCommitments[requestId];
+  function getCommitment(bytes32 requestId)
+    external
+    view
+    override
+    returns (
+      address,
+      uint64,
+      uint32,
+      uint32
+    )
+  {
+    Commitment memory commitment = s_requestCommitments[requestId];
+    return (
+      commitment.billing.client,
+      commitment.billing.subscriptionId,
+      commitment.billing.gasLimit,
+      commitment.billing.confirmations
+    );
   }
 
   function computeRequestId(
-    bytes32 keyHash,
-    address sender,
+    address don,
+    address client,
     uint64 subId,
     uint64 nonce
-  ) private pure returns (uint256, uint256) {
-    uint256 preSeed = uint256(keccak256(abi.encode(keyHash, sender, subId, nonce)));
-    return (uint256(keccak256(abi.encode(keyHash, preSeed))), preSeed);
+  ) private pure returns (bytes32, uint256) {
+    uint256 preSeed = uint256(keccak256(abi.encode(don, client, subId, nonce)));
+    return (keccak256(abi.encode(don, preSeed)), preSeed);
   }
 
   /**
@@ -485,127 +500,72 @@ contract VRFCoordinatorV2 is
     return success;
   }
 
-  function getRandomnessFromProof(Proof memory proof, RequestCommitment memory rc)
-    private
-    view
-    returns (
-      bytes32 keyHash,
-      uint256 requestId,
-      uint256 randomness
-    )
-  {
-    keyHash = hashOfKey(proof.pk);
-    // Only registered proving keys are permitted.
-    address oracle = s_provingKeys[keyHash];
-    if (oracle == address(0)) {
-      revert NoSuchProvingKey(keyHash);
-    }
-    requestId = uint256(keccak256(abi.encode(keyHash, proof.seed)));
-    bytes32 commitment = s_requestCommitments[requestId];
-    if (commitment == 0) {
-      revert NoCorrespondingRequest();
-    }
-    if (
-      commitment != keccak256(abi.encode(requestId, rc.blockNum, rc.subId, rc.callbackGasLimit, rc.numWords, rc.sender))
-    ) {
+  /**
+   * @inheritdoc OCR2DRRegistryInterface
+   */
+  function concludeBilling(
+    bytes32 requestId,
+    bytes calldata response,
+    bytes calldata err,
+    address transmitter,
+    address[maxNumOracles] memory, /* signers */
+    uint32 initialGas
+  ) external onlyAllowedDons nonReentrant returns (uint96) {
+    Commitment memory commitment = s_requestCommitments[requestId];
+    if (commitment.billing.client == address(0)) {
       revert IncorrectCommitment();
     }
-
-    bytes32 blockHash = blockhash(rc.blockNum);
-    if (blockHash == bytes32(0)) {
-      blockHash = BLOCKHASH_STORE.getBlockhash(rc.blockNum);
-      if (blockHash == bytes32(0)) {
-        revert BlockhashNotInStore(rc.blockNum);
-      }
-    }
-
-    // The seed actually used by the VRF machinery, mixing in the blockhash
-    uint256 actualSeed = uint256(keccak256(abi.encodePacked(proof.seed, blockHash)));
-    randomness = VRF.randomValueFromVRFProof(proof, actualSeed); // Reverts on failure
-  }
-
-  /*
-   * @notice Compute fee based on the request count
-   * @param reqCount number of requests
-   * @return feePPM fee in LINK PPM
-   */
-  function getFeeTier(uint64 reqCount) public view returns (uint32) {
-    FeeConfig memory fc = s_feeConfig;
-    if (0 <= reqCount && reqCount <= fc.reqsForTier2) {
-      return fc.fulfillmentFlatFeeLinkPPMTier1;
-    }
-    if (fc.reqsForTier2 < reqCount && reqCount <= fc.reqsForTier3) {
-      return fc.fulfillmentFlatFeeLinkPPMTier2;
-    }
-    if (fc.reqsForTier3 < reqCount && reqCount <= fc.reqsForTier4) {
-      return fc.fulfillmentFlatFeeLinkPPMTier3;
-    }
-    if (fc.reqsForTier4 < reqCount && reqCount <= fc.reqsForTier5) {
-      return fc.fulfillmentFlatFeeLinkPPMTier4;
-    }
-    return fc.fulfillmentFlatFeeLinkPPMTier5;
-  }
-
-  /*
-   * @notice Fulfill a randomness request
-   * @param proof contains the proof and randomness
-   * @param rc request commitment pre-image, committed to at request time
-   * @return payment amount billed to the subscription
-   * @dev simulated offchain to determine if sufficient balance is present to fulfill the request
-   */
-  function fulfillRandomWords(Proof memory proof, RequestCommitment memory rc) external nonReentrant returns (uint96) {
-    uint256 startGas = gasleft();
-    (bytes32 keyHash, uint256 requestId, uint256 randomness) = getRandomnessFromProof(proof, rc);
-
-    uint256[] memory randomWords = new uint256[](rc.numWords);
-    for (uint256 i = 0; i < rc.numWords; i++) {
-      randomWords[i] = uint256(keccak256(abi.encode(randomness, i)));
-    }
-
     delete s_requestCommitments[requestId];
-    VRFConsumerBaseV2 v;
-    bytes memory resp = abi.encodeWithSelector(v.rawFulfillRandomWords.selector, requestId, randomWords);
+
+    bytes memory callback = abi.encodeWithSelector(
+      OCR2DRClientInterface.handleOracleFulfillment.selector,
+      requestId,
+      response,
+      err
+    );
     // Call with explicitly the amount of callback gas requested
     // Important to not let them exhaust the gas budget and avoid oracle payment.
     // Do not allow any non-view/non-pure coordinator functions to be called
     // during the consumers callback code via reentrancyLock.
-    // Note that callWithExactGas will revert if we do not have sufficient gas
+    // NOTE: that callWithExactGas will revert if we do not have sufficient gas
     // to give the callee their requested amount.
     s_config.reentrancyLock = true;
-    bool success = callWithExactGas(rc.callbackGasLimit, rc.sender, resp);
+    bool success = callWithExactGas(commitment.billing.gasLimit, commitment.billing.client, callback);
     s_config.reentrancyLock = false;
-
-    // Increment the req count for fee tier selection.
-    uint64 reqCount = s_subscriptions[rc.subId].reqCount;
-    s_subscriptions[rc.subId].reqCount += 1;
 
     // We want to charge users exactly for how much gas they use in their callback.
     // The gasAfterPaymentCalculation is meant to cover these additional operations where we
     // decrement the subscription balance and increment the oracles withdrawable balance.
-    // We also add the flat link fee to the payment amount.
-    // Its specified in millionths of link, if s_config.fulfillmentFlatFeeLinkPPM = 1
-    // 1 link / 1e6 = 1e18 juels / 1e6 = 1e12 juels.
     uint96 payment = calculatePaymentAmount(
-      startGas,
+      initialGas,
       s_config.gasAfterPaymentCalculation,
-      getFeeTier(reqCount),
+      commitment.donFee,
+      commitment.registryFee,
       tx.gasprice
     );
-    if (s_subscriptions[rc.subId].balance < payment) {
+    if (s_subscriptions[commitment.billing.subscriptionId].balance < payment) {
       revert InsufficientBalance();
     }
-    s_subscriptions[rc.subId].balance -= payment;
-    s_withdrawableTokens[s_provingKeys[keyHash]] += payment;
+    /**
+     * Oracle Payment *
+     * Two options here:
+     *   1. Reimburse the transmitter for execution cost, then split the requiredFee across all participants.
+     *   2. Pay transmitter the full amount. Since the transmitter is chosen OCR, we trust the fairness of their selection algorithm.
+     * Using Option 1 here.
+     **/
+    s_subscriptions[commitment.billing.subscriptionId].balance -= payment;
+    s_withdrawableTokens[transmitter] += payment;
     // Include payment in the event for tracking costs.
-    emit RandomWordsFulfilled(requestId, randomness, payment, success);
+    emit BillingEnd(requestId, payment, success);
     return payment;
   }
 
   // Get the amount of gas used for fulfillment
   function calculatePaymentAmount(
     uint256 startGas,
-    uint256 gasAfterPaymentCalculation,
-    uint32 fulfillmentFlatFeeLinkPPM,
+    uint32 gasAfterPaymentCalculation,
+    uint96 donFee,
+    uint96 registryFee,
     uint256 weiPerUnitGas
   ) internal view returns (uint96) {
     int256 weiPerUnitLink;
@@ -616,7 +576,7 @@ contract VRFCoordinatorV2 is
     // (1e18 juels/link) (wei/gas * gas) / (wei/link) = juels
     uint256 paymentNoFee = (1e18 * weiPerUnitGas * (gasAfterPaymentCalculation + startGas - gasleft())) /
       uint256(weiPerUnitLink);
-    uint256 fee = 1e12 * uint256(fulfillmentFlatFeeLinkPPM);
+    uint256 fee = uint256(donFee) + uint256(registryFee);
     if (paymentNoFee > (1e27 - fee)) {
       revert PaymentTooLarge(); // Payment + fee cannot be more than all of the link in existence.
     }
@@ -638,10 +598,12 @@ contract VRFCoordinatorV2 is
 
   /*
    * @notice Oracle withdraw LINK earned through fulfilling requests
+   * @notice If amount is 0 the full balance will be withdrawn
    * @param recipient where to send the funds
    * @param amount amount to withdraw
    */
   function oracleWithdraw(address recipient, uint96 amount) external nonReentrant {
+    if (amount == 0) amount = s_withdrawableTokens[msg.sender];
     if (s_withdrawableTokens[msg.sender] < amount) {
       revert InsufficientBalance();
     }
@@ -680,7 +642,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function getSubscription(uint64 subId)
     external
@@ -688,7 +650,6 @@ contract VRFCoordinatorV2 is
     override
     returns (
       uint96 balance,
-      uint64 reqCount,
       address owner,
       address[] memory consumers
     )
@@ -696,22 +657,17 @@ contract VRFCoordinatorV2 is
     if (s_subscriptionConfigs[subId].owner == address(0)) {
       revert InvalidSubscription();
     }
-    return (
-      s_subscriptions[subId].balance,
-      s_subscriptions[subId].reqCount,
-      s_subscriptionConfigs[subId].owner,
-      s_subscriptionConfigs[subId].consumers
-    );
+    return (s_subscriptions[subId].balance, s_subscriptionConfigs[subId].owner, s_subscriptionConfigs[subId].consumers);
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function createSubscription() external override nonReentrant returns (uint64) {
     s_currentSubId++;
     uint64 currentSubId = s_currentSubId;
     address[] memory consumers = new address[](0);
-    s_subscriptions[currentSubId] = Subscription({balance: 0, reqCount: 0});
+    s_subscriptions[currentSubId] = Subscription({balance: 0});
     s_subscriptionConfigs[currentSubId] = SubscriptionConfig({
       owner: msg.sender,
       requestedOwner: address(0),
@@ -723,7 +679,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function requestSubscriptionOwnerTransfer(uint64 subId, address newOwner)
     external
@@ -739,7 +695,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function acceptSubscriptionOwnerTransfer(uint64 subId) external override nonReentrant {
     if (s_subscriptionConfigs[subId].owner == address(0)) {
@@ -755,7 +711,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function removeConsumer(uint64 subId, address consumer) external override onlySubOwner(subId) nonReentrant {
     if (s_consumers[consumer][subId] == 0) {
@@ -779,7 +735,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function addConsumer(uint64 subId, address consumer) external override onlySubOwner(subId) nonReentrant {
     // Already maxed, cannot add any more consumers.
@@ -799,7 +755,7 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
+   * @inheritdoc OCR2DRRegistryInterface
    */
   function cancelSubscription(uint64 subId, address to) external override onlySubOwner(subId) nonReentrant {
     if (pendingRequestExists(subId)) {
@@ -827,21 +783,21 @@ contract VRFCoordinatorV2 is
   }
 
   /**
-   * @inheritdoc VRFCoordinatorV2Interface
-   * @dev Looping is bounded to MAX_CONSUMERS*(number of keyhashes).
+   * @inheritdoc OCR2DRRegistryInterface
+   * @dev Looping is bounded to MAX_CONSUMERS*(number of DONs).
    * @dev Used to disable subscription canceling while outstanding request are present.
    */
   function pendingRequestExists(uint64 subId) public view override returns (bool) {
     SubscriptionConfig memory subConfig = s_subscriptionConfigs[subId];
     for (uint256 i = 0; i < subConfig.consumers.length; i++) {
-      for (uint256 j = 0; j < s_provingKeyHashes.length; j++) {
-        (uint256 reqId, ) = computeRequestId(
-          s_provingKeyHashes[j],
+      for (uint256 j = 0; j < s_dons.length; j++) {
+        (bytes32 reqId, ) = computeRequestId(
+          s_dons[j],
           subConfig.consumers[i],
           subId,
           s_consumers[subConfig.consumers[i]][subId]
         );
-        if (s_requestCommitments[reqId] != 0) {
+        if (s_requestCommitments[reqId].don != address(0)) {
           return true;
         }
       }
@@ -860,6 +816,13 @@ contract VRFCoordinatorV2 is
     _;
   }
 
+  modifier onlyAllowedDons() {
+    if (!s_allowedDons[msg.sender]) {
+      revert MustBeAllowedDon();
+    }
+    _;
+  }
+
   modifier nonReentrant() {
     if (s_config.reentrancyLock) {
       revert Reentrant();
@@ -872,6 +835,6 @@ contract VRFCoordinatorV2 is
    * @return Type and version string
    */
   function typeAndVersion() external pure virtual override returns (string memory) {
-    return "VRFCoordinatorV2 1.0.0";
+    return "OCR2DRRegistry 0.0.0";
   }
 }
