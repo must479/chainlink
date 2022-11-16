@@ -121,6 +121,12 @@ func (t *BridgeTask) Run(ctx context.Context, lggr logger.Logger, vars Vars, inp
 		}
 
 		var cacheErr error
+		lggr.Debugw("Bridge task: task failed, looking up cached value",
+			"err", err,
+			"cacheTTL in seconds", cacheTTL,
+			"ttl", time.Duration(cacheTTL)*time.Second,
+			"elapsed", time.Now().Add(-time.Duration(cacheTTL)*time.Second),
+		)
 		responseBytes, cacheErr = t.orm.GetCachedResponse(t.dotID, t.specId, time.Duration(cacheTTL)*time.Second)
 		if cacheErr != nil {
 			lggr.Errorw("Bridge task: cache fallback failed",

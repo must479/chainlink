@@ -264,6 +264,69 @@ func TestBridgeTask_HandlesIntermittentFailure(t *testing.T) {
 	require.Equal(t, runInfo.IsRetryable, runInfo2.IsRetryable)
 }
 
+func TestBridgeTask_DoesNotReturnStaleValuesLong(t *testing.T) {
+	t.Parallel()
+
+	db := pgtest.NewSqlxDB(t)
+	cfg := configtest2.NewGeneralConfig(t, func(c *chainlink.Config, s *chainlink.Secrets) {
+		c.WebServer.BridgeCacheTTL = models.MustNewDuration(1 * time.Second)
+	})
+
+	s1 := httptest.NewServer(fakeIntermittentlyFailingPriceResponder(t, utils.MustUnmarshalToMap(btcUSDPairing), decimal.NewFromInt(9700), "", nil))
+	defer s1.Close()
+
+	feedURL, err := url.ParseRequestURI(s1.URL)
+	require.NoError(t, err)
+
+	orm := bridges.NewORM(db, logger.TestLogger(t), cfg)
+	_, bridge := cltest.MustCreateBridge(t, db, cltest.BridgeOpts{URL: feedURL.String()}, cfg)
+
+	task := pipeline.BridgeTask{
+		BaseTask:    pipeline.NewBaseTask(0, "bridge", nil, nil, 0),
+		Name:        bridge.Name.String(),
+		RequestData: btcUSDPairing,
+		// CacheTTL:    "5s", // standard duration string format
+	}
+	c := clhttptest.NewTestLocalOnlyHTTPClient()
+	trORM := pipeline.NewORM(db, logger.TestLogger(t), cfg)
+	specID, err := trORM.CreateSpec(pipeline.Pipeline{}, *models.NewInterval(5 * time.Minute), pg.WithParentCtx(testutils.Context(t)))
+	require.NoError(t, err)
+	task.HelperSetDependencies(cfg, orm, specID, uuid.UUID{}, c)
+	result, runInfo := task.Run(testutils.Context(t), logger.TestLogger(t),
+		pipeline.NewVarsFrom(
+			map[string]interface{}{
+				"jobRun": map[string]interface{}{
+					"meta": map[string]interface{}{
+						"shouldFail": false,
+					},
+				},
+			},
+		),
+		nil)
+
+	assert.False(t, runInfo.IsPending)
+	assert.False(t, runInfo.IsRetryable)
+	require.NoError(t, result.Error)
+	require.NotNil(t, result.Value)
+
+	time.Sleep(2 * time.Second)
+
+	result2, _ := task.Run(testutils.Context(t), logger.TestLogger(t),
+		pipeline.NewVarsFrom(
+			map[string]interface{}{
+				"jobRun": map[string]interface{}{
+					"meta": map[string]interface{}{
+						"shouldFail": true,
+					},
+				},
+			},
+		),
+		nil)
+
+	require.Error(t, result2.Error)
+	require.Nil(t, result2.Value)
+}
+
 func TestBridgeTask_DoesNotReturnStaleResults(t *testing.T) {
 	t.Parallel()
 
