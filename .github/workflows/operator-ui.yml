@@ -32,7 +32,7 @@ jobs:
         run: ./operator_ui/check.sh
 
       - name: Open PR
-        uses: peter-evans/create-pull-request@18f90432bedd2afd6a825469ffd38aa24712a91d # v4.1.1
+        uses: peter-evans/create-pull-request@331d02c7e2104af23ad5974d4d5cbc58a3e6dc77 # v4.2.2
         with:
           title: Update Operator UI from ${{ steps.update.outputs.current_tag }} to ${{ steps.update.outputs.latest_tag }}
           branch: chore/update-operator-ui
