@@ -6,3 +6,4 @@ abi
 coverage
 coverage.json
 typechain
+.DS_Store
